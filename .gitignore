@@ -1,0 +1,29 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+.git/
+*.egg-info
+
+# another
+.vscode/
+test.log
+.mypy_cache/
+.ruff_cache/
+
+dir/
+fold/
+_.cpp
+_.js
+_.py
+_.go
+go.mod
+
+# Virtual environments
+.venv
+
+# secrets
+.env
+db.sqlite3
