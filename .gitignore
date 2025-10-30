@@ -19,7 +19,9 @@ _.cpp
 _.js
 _.py
 _.go
-go.mod
+go/
+ruff.toml
+uv.lock
 
 # Virtual environments
 .venv

@@ -1,27 +1,19 @@
-# import asyncio
-import uvicorn
+import asyncio
 
-from fastapi import FastAPI
-
-# from src.core.settings import config
-# from src.handlers.telegram.app.debug import router as tg_router
-from src.core.startup_configure import lifespan
-from src.handlers.api.router import router as api_router
+from src.core.settings import config
+from src.core.startup_configure import on_shutdown, on_startup
+from src.handlers.telegram.router import router
 
 
-app = FastAPI(debug=True, lifespan=lifespan)
-app.title = "YUQA"
-app.include_router(router=api_router, prefix="/view")
+async def main():
+    bot = config.bot
+    dp = config.dp
+    dp.include_router(router)
 
-
-def main():
-    # dp = config.dp
-    # bot = config.bot
-    # dp.include_router(router=tg_router)
-    # asyncio.create_task(dp.start_polling(bot))
-
-    uvicorn.run(app="main:app", host="127.0.0.1", port=8099, reload=True)
+    await on_startup()
+    await dp.start_polling(bot)
+    await on_shutdown()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
