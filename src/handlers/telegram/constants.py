@@ -1,9 +1,16 @@
-from enum import Enum
+from dataclasses import dataclass
 
 
-class Navigation(Enum):
+@dataclass(frozen=True, slots=True)
+class Navigation:
+    main = "MAIN"
     profile = "PROFILE"
     battle = "BATTLE"
     shop = "SHOP"
     inventory = "INVENTORY"
     tour = "TOUR"
+
+    @dataclass(frozen=True, slots=True)
+    class in_battle:
+        standard = "STANDARD"
+        duo = "DUO"

@@ -7,12 +7,21 @@ from src.database.core import get_db
 from src.users.models import MUser
 
 
-async def check_user(id: int) -> bool: # type: ignore
+async def check_user(id: int) -> bool:
     db_session: AsyncSession = await get_db()
     query = select(MUser.id).where(MUser.id == id)
     user: Optional[int] = (await db_session.execute(query)).scalar_one_or_none()
+    await db_session.close()
 
     return bool(user)
+
+
+async def get_user(id: int) -> Optional[MUser]:
+	db_session: AsyncSession = await get_db()
+	query = select(MUser).where(MUser.id == id)
+	user: Optional[MUser] = (await db_session.execute(query)).scalar_one_or_none()
+
+	return user
 
 
 async def create_user(id: int) -> bool:
@@ -31,12 +40,12 @@ async def create_user(id: int) -> bool:
   
 
 async def delete_user(id: int) -> bool:
-  db_session: AsyncSession = await get_db()
-  query = select(MUser).where(MUser.id == id)
-  user: Optional[MUser] = (await db_session.execute(query)).scalar_one_or_none()
-  if user is None:
-    return False
+	db_session: AsyncSession = await get_db()
+	query = select(MUser).where(MUser.id == id)
+	user: Optional[MUser] = (await db_session.execute(query)).scalar_one_or_none()
+	if user is None:
+		return False
 
-  await db_session.delete(user)
-  await db_session.commit()
-  return True
+	await db_session.delete(user)
+	await db_session.commit()
+	return True

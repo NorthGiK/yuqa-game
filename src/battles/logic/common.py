@@ -62,11 +62,3 @@ class DeckSize:
     неизменяемый класс для обозначения размера колоды в бою
     """
     value: int = field(default=0)
-
-
-@dataclass
-class Ability:
-    @staticmethod
-    def create_ability(
-        id
-    )
