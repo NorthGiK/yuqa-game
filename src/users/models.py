@@ -1,11 +1,11 @@
 from dataclasses import dataclass
 import datetime
 
-from src.database.BaseModel import Base
+from sqlalchemy import text
 
 
 @dataclass(slots=True)
-class MUser(Base):
+class MUser:
     id: int
 
     rating: int
@@ -16,7 +16,7 @@ class MUser(Base):
     create_at: datetime.date
 
 
-CREATE_USERS_TABLE = """
+CREATE_USERS_TABLE = text("""
 CREATE TABLE IF NOT EXISTS users_t (
     id INT PRIMARY KEY,
 
@@ -27,4 +27,4 @@ CREATE TABLE IF NOT EXISTS users_t (
     active BOOl,
     created_at DATE
 );
-"""
+""")

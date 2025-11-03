@@ -1,13 +1,16 @@
-from typing import List
-
-from sqlalchemy.orm import Mapped, mapped_column
-
-from src.database.core import Base
+from sqlalchemy import text
 
 
-class MBattleQueue(Base):
-  __tablename__ = 'battle_queues'
-  _prim_id: Mapped[int] = mapped_column(primary_key=True)
-  
-  user_id: Mapped[int] = mapped_column()
-  deck: Mapped[List[int]] = mapped_column()
+class MBattleQueue:
+  id: int
+  user_id: int
+  deck: list[int]
+
+
+CREATE_BATTLE_QUEUE_TABLE = text("""
+CREATE TABLE IF NOT EXISTS battle_queues (
+  id INT PRIMARY KEY,
+  user_id INT,
+  deck INT ARRAY
+);
+""")
