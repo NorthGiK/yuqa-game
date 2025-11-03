@@ -1,23 +1,30 @@
+from dataclasses import dataclass
 import datetime
-
-from sqlalchemy.orm import Mapped, mapped_column
 
 from src.database.BaseModel import Base
 
 
-def get_time() -> datetime.datetime:
-    return datetime.datetime.now(datetime.timezone.utc)
-
+@dataclass(slots=True)
 class MUser(Base):
-    __tablename__ = 'users_table'
-    # _prim_id: Mapped[int] = mapped_column(primary_key=True)
+    id: int
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    rating: int
+    cards: list[int]
+    inventory: list[int]
 
-    rating: Mapped[int] = mapped_column(default=0)
-    cards: Mapped[int] = mapped_column(default=2)
-    inventory: Mapped[str] = mapped_column(default=2, doc="list of card ids")
+    active: bool
+    create_at: datetime.date
 
-    role: Mapped[str] = mapped_column()
-    active: Mapped[bool] = mapped_column(default=True)
-    create_at: Mapped[datetime.datetime] = mapped_column(default=get_time)
+
+CREATE_USERS_TABLE = """
+CREATE TABLE IF NOT EXISTS users_t (
+    id INT PRIMARY KEY,
+
+    rating INT,
+    cards INT ARRAY,
+    inventory INT ARRAY,
+
+    active BOOl,
+    created_at DATE
+);
+"""

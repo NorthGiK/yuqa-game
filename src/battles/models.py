@@ -1,3 +1,5 @@
+from typing import List
+
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.database.core import Base
@@ -8,4 +10,4 @@ class MBattleQueue(Base):
   _prim_id: Mapped[int] = mapped_column(primary_key=True)
   
   user_id: Mapped[int] = mapped_column()
-  deck: Mapped[str] = mapped_column()
+  deck: Mapped[List[int]] = mapped_column()

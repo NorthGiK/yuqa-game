@@ -7,7 +7,9 @@ from sqlalchemy.ext.asyncio import (
 from src.database.BaseModel import Base
 
 
-engine = create_async_engine("sqlite+aiosqlite:///db.sqlite3", echo=True)
+engine = create_async_engine("postgresql+asyncpg://yuqa:GitlerBest1488,@localhost/yuqa_db",
+# "sqlite+aiosqlite:///db.sqlite3",
+echo=True)
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,

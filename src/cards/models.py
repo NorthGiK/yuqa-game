@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Annotated, Iterable, Optional
+from typing import Annotated, Iterable, List, Optional
 from uuid import UUID
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -9,35 +9,61 @@ from src.database.core import Base
 from src.cards.exceptions import IncorrectTargetError
 
 
+class MUniverse(Base):
+    __tablename__ = "universes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+
+    name: Mapped[str] = mapped_column(unique=True)
+    cards: Mapped[List["MCard"]] = relationship(back_populates="universe")
+
+
 class MCard(Base):
     __tablename__ = "cards"
 
-    _prim_id: Mapped[int] = mapped_column(primary_key=True)
+    id: Mapped[int] = mapped_column(primary_key=True)
 
-    name:        Mapped[str] = mapped_column(unique=True)
-    universe:    Mapped[str] = mapped_column()
-    rarity:      Mapped[str] = mapped_column()
+    name: Mapped[str] = mapped_column(unique=True)
+    universe: Mapped[MUniverse] = relationship(back_populates="universes.cards")
+    rarity: Mapped[str] = mapped_column()
     description: Mapped[str] = mapped_column()
 
-    # ability: Mapped['Ability'] = relationship(back_populates="_prim_id")
-    class_:  Mapped[str]       = mapped_column()
+    ability: Mapped['MAbility'] = relationship(back_populates="MAbility.card")
+    class_: Mapped[str] = mapped_column()
 
-    atk:  Mapped[int] = mapped_column()
-    hp:   Mapped[int] = mapped_column()
+    atk: Mapped[int] = mapped_column()
+    hp: Mapped[int] = mapped_column()
     def_: Mapped[int] = mapped_column()
 
 
-class MAbility(Base):
-    __tablename__ = 'abilities'
+CREATE_CARD_TABLE = """
+CREATE TABLE IF NOT EXISTS cards (
+    id INT PRIMARY KEY,
 
-    _prim_id: Mapped[int] = mapped_column(primary_key=True)
+    name VARCHAR,
+    universe VARCHAR,
+    rarity VARCHAR,
+    description TEXT,
 
-    sub_abilities: Mapped[str]   = mapped_column()
-    # card:          Mapped[MCard] = relationship(back_populates="_prim_id")
-    cooldown:      Mapped[int]   = mapped_column()
-    duration:      Mapped[int]   = mapped_column()
-    cost:          Mapped[int]   = mapped_column()
+    ability FOREIGNKEY abilities.id,
+    class VARCHAR,
 
+    atk INT,
+    hp INT,
+    def_ INT
+);
+"""
+
+
+CREATE_ABILITY_TABLE = """
+CREATE TABLE IF NOT EXISTS abilities (
+    id INT PRIMARY KEY,
+    sub_abilities JSON,
+    cards INT ARRAY,
+    cooldown INT,
+    duration INT,
+    cost INT
+);
+"""
 
 class Rarity(Enum):
     common = "ОБЫЧНАЯ"
@@ -46,7 +72,7 @@ class Rarity(Enum):
 
 
 @dataclass(slots=True)
-class Card:
+class MCard:
     id: int
     name: str
     universe: str
@@ -61,7 +87,7 @@ class Card:
 
 @dataclass(slots=True)
 class Deck:
-    cards: list[Card]
+    cards: list[MCard]
     id: Optional[Annotated[str, UUID]] = field(default=None)
 
 

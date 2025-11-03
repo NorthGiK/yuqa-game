@@ -16,6 +16,7 @@ test.log
 dir/
 fold/
 _.cpp
+test
 _.js
 _.py
 _.go
