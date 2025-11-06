@@ -11,7 +11,7 @@ async def main():
     dp.include_router(router)
 
     await on_startup()
-    await dp.start_polling(bot)
+    await dp.start_polling(bot) #type:ignore
     await on_shutdown()
 
 

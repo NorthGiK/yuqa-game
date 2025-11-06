@@ -1,41 +1,42 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Iterable, Optional
+from typing import Optional, Iterable
 
-from sqlalchemy import text
+from pydantic import BaseModel, Field
+from sqlalchemy import JSON
+from sqlalchemy.orm import Mapped, mapped_column
 
 from src.cards.exceptions import IncorrectTargetError
+from src.database.BaseModel import Base
 
 
-CREATE_CARD_TABLE = text("""
-CREATE TABLE IF NOT EXISTS cards (
-    id INT PRIMARY KEY,
+class MCard(Base):
+    __tablename__ = "cards"
 
-    name VARCHAR,
-    universe VARCHAR,
-    rarity VARCHAR,
-    description TEXT,
+    id: Mapped[int] = mapped_column(primary_key=True)
 
-    ability INT,
-    class VARCHAR,
+    name: Mapped[str] = mapped_column() 
+    universe: Mapped[str] = mapped_column()
+    rarity: Mapped[str] = mapped_column()
+    description: Mapped[str] = mapped_column()
 
-    atk INT,
-    hp INT,
-    def_ INT
-);
-""")
+    ability: Mapped[str] = mapped_column(JSON)
+    class_: Mapped[str] = mapped_column()
+
+    atk: Mapped[int] = mapped_column()
+    hp: Mapped[int] = mapped_column()
+    def_: Mapped[int] = mapped_column()
 
 
-CREATE_ABILITY_TABLE = text("""
-CREATE TABLE IF NOT EXISTS abilities (
-    id INT PRIMARY KEY,
-    sub_abilities JSON,
-    cards INT ARRAY,
-    cooldown INT,
-    duration INT,
-    cost INT
-);
-""")
+class MAbilities(Base):
+    __tablename__ = "abilities"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sub_abilities: Mapped[str] = mapped_column(JSON)
+    cards: Mapped[list[int]] = mapped_column(JSON)
+    cooldown: Mapped[int] = mapped_column()
+    duration: Mapped[int] = mapped_column()
+    cost: Mapped[int] = mapped_column()
+
 
 class Rarity(Enum):
     common = "ОБЫЧНАЯ"
@@ -43,23 +44,29 @@ class Rarity(Enum):
     badenko = "БАДЕНКО"
 
 
-@dataclass(slots=True)
-class MCard:
+class CardInInventory(BaseModel):
+    id: int
+    name: str
+    atk: int
+    hp: int
+
+
+class Card(BaseModel):
     id: int
     name: str
     universe: str
     rarity: Rarity
     description: str
-    class_: ...
+    class_: str
     atk: int
     hp: int
     def_: int
-    pos: Optional[int] = field(default=None)
+    pos: Optional[int] = Field(default=None)
 
 
 @dataclass(slots=True, frozen=True)
 class Deck:
-    cards: list[MCard]
+    cards: list[Card]
     id: Optional[int] = field(default=None)
 
 

@@ -1,57 +1,106 @@
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional, Sequence
 
-from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.cards import models
-from src.database.core import get_db
+from src.cards.models import Card, CardInInventory, MCard, Rarity
+from src.database.core import AsyncSessionLocal, get_db
+from src.shared.redis_broker import redis
+from src.users.models import MUser
 
 
-async def get_card(id: int) -> Optional[models.Card]:
+async def get_card(id: int) -> Optional[Card]:
     db_session: AsyncSession = await get_db()
-    query = select(models.MCard).where(models.MCard._prim_id == id)
-    card: Optional[models.MCard] = (
+    query = select(MCard).where(MCard.id == id)
+    card: Optional[MCard] = (
         await db_session.execute(query)
     ).scalar_one_or_none()
+
     if card is None:
         return None
 
-    return models.Card(
-        id=card._prim_id,
-        name=card.name,
-        universe=card.universe,
-        rarity=card.rarity,
-        description=card.description,
-        class_=card.class_,
-        def_=card.def_,
-        atk=card.atk,
-        hp=card.hp,
-    )
+    args = card.__table__.columns
+    return Card.model_validate(args, from_attributes=True)
 
 
-async def get_cards(ids: Iterable[int]) -> list[models.Card]:
+async def _base_get_cards(query: Select[Any]) -> Sequence[MCard] | None:
     """
     returns cards by their id
     """
-    cards: list[models.Card] = []
-    for id in ids:
-        card = await get_card(id)
-        if card is None:
-            raise HTTPException(
-                status_code=status.HTTP_406_NOT_ACCEPTABLE,
-                detail="invalid card id!",
-            )
-        cards.append(card)
+    async with AsyncSessionLocal() as session:
+        try:
+            cards: Sequence[MCard] = (
+                await session.execute(query)
+            ).scalars().all()
+        except:
+            return None
 
+    return cards
+
+async def get_cards(ids: Iterable[int]) -> list[Card] | None:
+    query = select(MCard).where(MCard.id.in_(ids))
+    raw_cards: Sequence[MCard] | None = await _base_get_cards(query=query)
+    if raw_cards is None:
+        return None
+
+    cards: list[Card] = [Card.model_validate(card, from_attributes=True) for card in raw_cards]
+    return cards
+
+async def get_cards_by_rarity(
+    user_id: int,
+    rarity: Rarity,
+) -> Optional[list[CardInInventory]]:
+    page: Optional[int] = await redis.get(f"inventory_page:{user_id}")
+    if page is None:
+        return None
+
+    card_ids_query = (
+        select(MUser.inventory)
+        .where(
+            MUser.id == user_id)
+    )
+
+    async with AsyncSessionLocal() as session:
+        card_ids: list[int] | None = (await session.execute(card_ids_query)).scalar_one_or_none()
+        if card_ids is None:
+            return None
+    
+
+    query = (
+        select(MCard)
+        .where(
+            MCard.id.in_(card_ids),
+            MCard.rarity == rarity.name)
+    )
+
+    raw_cards: Sequence[MCard] | None = await _base_get_cards(query=query)
+    if raw_cards is None:
+        return None
+
+    start: int = page
+    end: int = page + 9
+    if (l := len(raw_cards)) > end:
+        end = l
+    
+    cards: list[CardInInventory] = [
+        CardInInventory.model_validate(card, from_attributes=True)
+        for card in raw_cards[start:end]
+    ]
     return cards
 
 
 async def get_decks(
         ids: dict[int, Iterable[int]],
-    ) -> dict[int, list[models.Card]]:
-    decks: dict[int, list[models.Card]] = {}
-    for user, cards in ids.items():
-        decks[user] = await get_cards(cards)
+    ) -> dict[int, list[Card]] | None:
+    # TODO: Что-нибудь придумать, чтобы не делать 2 запроса в бд
+
+    decks: dict[int, list[Card]] = {}
+
+    for user_id, card_ids in ids.items():
+        cards = await get_cards(card_ids)
+        if cards is None:
+            return None
+
+        decks[user_id] = cards
 
     return decks

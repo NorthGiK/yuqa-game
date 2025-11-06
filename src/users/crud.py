@@ -1,27 +1,35 @@
 from typing import Optional
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.database.core import get_db
+from src.database.core import AsyncSessionLocal
 from src.users.models import MUser
 
 
 async def check_user(id: int) -> bool:
-    db_session: AsyncSession = await get_db()
-    query = select(MUser.id).where(MUser.id == id)
-    user: Optional[int] = (await db_session.execute(query)).scalar_one_or_none()
-    await db_session.close()
+    stmt = select(MUser.id).where(MUser.id == id)
+    async with AsyncSessionLocal() as db_session:
+        print("*\n" * 10)
+        print("from check!")
+        print()
+        user: Optional[int] = (await db_session.execute(stmt)).scalar_one_or_none()
 
     return bool(user)
 
 
 async def get_user(id: int) -> Optional[MUser]:
-	db_session: AsyncSession = await get_db()
-	query = select(MUser).where(MUser.id == id)
-	user: Optional[MUser] = (await db_session.execute(query)).scalar_one_or_none()
+    stmt = select(MUser).where(MUser.id == id)
 
-	return user
+    async with AsyncSessionLocal() as db_session:
+        db_response: Optional[MUser] = (await db_session.execute(stmt)).scalar_one_or_none()
+
+    if db_response is None:
+        return db_response
+
+    columns = db_response.__table__.columns
+    user: Optional[MUser] = MUser(**columns)
+
+    return user
 
 
 async def create_user(id: int) -> bool:
@@ -29,23 +37,28 @@ async def create_user(id: int) -> bool:
     if exist:
         return False
 
-    db_session: AsyncSession = await get_db()
+    new_user = MUser(
+        id=id,
+        inventory=[1,2],
+        deck=[1,2],
+    )
 
-    new_user = MUser(id=id, role="tim")
-
-    db_session.add(new_user)
-    await db_session.commit()
+    async with AsyncSessionLocal() as db_session:
+        db_session.add(new_user)
+        await db_session.commit()
 
     return True
   
 
 async def delete_user(id: int) -> bool:
-	db_session: AsyncSession = await get_db()
-	query = select(MUser).where(MUser.id == id)
-	user: Optional[MUser] = (await db_session.execute(query)).scalar_one_or_none()
-	if user is None:
-		return False
+    query = select(MUser).where(MUser.id == id)
 
-	await db_session.delete(user)
-	await db_session.commit()
-	return True
+    async with AsyncSessionLocal() as db_session:
+        user: Optional[MUser] = (await db_session.execute(query)).scalar_one_or_none()
+        if user is None:
+            return False
+
+        await db_session.delete(user)
+        await db_session.commit()
+
+    return True

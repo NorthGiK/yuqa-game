@@ -11,6 +11,12 @@ class Navigation:
     tour = "TOUR"
 
     @dataclass(frozen=True, slots=True)
+    class in_inventory:
+        legendary = "LEGENDARY"
+        
+
+
+    @dataclass(frozen=True, slots=True)
     class in_battle:
         standard = "STANDARD"
         duo = "DUO"

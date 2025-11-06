@@ -19,6 +19,7 @@ _.cpp
 test
 _.js
 _.py
+_.ipynb
 _.go
 go/
 ruff.toml

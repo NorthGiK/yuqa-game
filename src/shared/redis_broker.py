@@ -1,4 +1,3 @@
-from aioredis import Redis
+from redis.asyncio import Redis
 
-
-redis = Redis( )
+redis = Redis()
