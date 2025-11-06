@@ -1,6 +1,7 @@
 from typing import Any, Iterable, Optional, Sequence
 
 from sqlalchemy import Select, select
+from sqlalchemy.sql import operators
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.cards.models import Card, CardInInventory, MCard, Rarity
@@ -49,44 +50,45 @@ async def get_cards(ids: Iterable[int]) -> list[Card] | None:
 async def get_cards_by_rarity(
     user_id: int,
     rarity: Rarity,
+    next: bool,
 ) -> Optional[list[CardInInventory]]:
-    page: Optional[int] = await redis.get(f"inventory_page:{user_id}")
-    if page is None:
+    card_id_in: Optional[int] = await redis.get(f"inventory_page:{user_id}")
+    if card_id_in is None:
         return None
 
     card_ids_query = (
-        select(MUser.inventory)
-        .where(
-            MUser.id == user_id)
+        select(
+            MCard.id, 
+            MCard.name, 
+            MCard.atk, 
+            MCard.hp,
+        ).where(
+            MCard.rarity == rarity,
+            MCard.id.in_(
+                select(MUser.inventory)
+                .where(
+                    MUser.id == user_id,
+                    MUser.inventory.any(card_id_in, #type:ignore
+                                        operator=operators.gt if next
+                                        else operators.lt)) 
+                .limit(10)
+            )
+        )
     )
 
     async with AsyncSessionLocal() as session:
-        card_ids: list[int] | None = (await session.execute(card_ids_query)).scalar_one_or_none()
-        if card_ids is None:
-            return None
-    
+        cards: Sequence[tuple[int, str, int, int]] = (await session.execute(card_ids_query)).scalars().all()
 
-    query = (
-        select(MCard)
-        .where(
-            MCard.id.in_(card_ids),
-            MCard.rarity == rarity.name)
-    )
-
-    raw_cards: Sequence[MCard] | None = await _base_get_cards(query=query)
-    if raw_cards is None:
-        return None
-
-    start: int = page
-    end: int = page + 9
-    if (l := len(raw_cards)) > end:
-        end = l
-    
-    cards: list[CardInInventory] = [
-        CardInInventory.model_validate(card, from_attributes=True)
-        for card in raw_cards[start:end]
+    parsed_cards: list[CardInInventory] = [
+        CardInInventory(
+            id=card[0],
+            name=card[1],
+            atk=card[2],
+            hp=card[3],
+        )
+        for card in cards
     ]
-    return cards
+    return parsed_cards
 
 
 async def get_decks(

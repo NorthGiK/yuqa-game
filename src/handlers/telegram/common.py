@@ -66,7 +66,6 @@ async def _show_cards_for_rarity(
     clbk: CallbackQuery,
     rarity: Rarity,
 ) -> None:
-    # prev, last = await redis.get(f"pages:{clbk.from_user.id}")
     user_id: int = clbk.from_user.id #type:ignore
     cards: list[CardInInventory] | None = await get_cards_by_rarity(rarity=rarity, user_id=user_id)
 
