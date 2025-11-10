@@ -2,40 +2,40 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, Iterable
 
-from pydantic import BaseModel, Field
-from sqlalchemy import JSON
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import JSON, Column, ForeignKey, Integer, String, Text
 
-from src.cards.exceptions import IncorrectTargetError
 from src.database.BaseModel import Base
 
 
 class MCard(Base):
     __tablename__ = "cards"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    id = Column(Integer, primary_key=True, index=True)
 
-    name: Mapped[str] = mapped_column() 
-    universe: Mapped[str] = mapped_column()
-    rarity: Mapped[str] = mapped_column()
-    description: Mapped[str] = mapped_column()
+    name = Column(String, unique=True)
 
-    ability: Mapped[str] = mapped_column(JSON)
-    class_: Mapped[str] = mapped_column()
+    universe = Column(String(50))
+    rarity = Column(String(50))
 
-    atk: Mapped[int] = mapped_column()
-    hp: Mapped[int] = mapped_column()
-    def_: Mapped[int] = mapped_column()
+    ability_id = Column(Integer, ForeignKey("abilities.id"), unique=True)
+    description = Column(Text)
+
+    class_ = Column(String)
+
+    atk = Column(Integer)
+    hp = Column(Integer)
+    def_ = Column(Integer)
 
 
 class MAbilities(Base):
     __tablename__ = "abilities"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    sub_abilities: Mapped[str] = mapped_column(JSON)
-    cards: Mapped[list[int]] = mapped_column(JSON)
-    cooldown: Mapped[int] = mapped_column()
-    duration: Mapped[int] = mapped_column()
-    cost: Mapped[int] = mapped_column()
+
+    id = Column(Integer, primary_key=True)
+    sub_abilities = Column(JSON)
+    card_id = Column(Integer, ForeignKey("cards.id"), unique=True)
+    cooldown = Column(Integer)
+    duration = Column(Integer)
+    cost = Column(Integer)
 
 
 class Rarity(Enum):
@@ -44,29 +44,21 @@ class Rarity(Enum):
     badenko = "БАДЕНКО"
 
 
-class CardInInventory(BaseModel):
-    id: int
-    name: str
-    atk: int
-    hp: int
-
-
-class Card(BaseModel):
+@dataclass(slots=True)
+class Card:
     id: int
     name: str
     universe: str
     rarity: Rarity
-    description: str
-    class_: str
     atk: int
     hp: int
     def_: int
-    pos: Optional[int] = Field(default=None)
+    pos: Optional[int] = field(default=None)
 
 
 @dataclass(slots=True, frozen=True)
 class Deck:
-    cards: list[Card]
+    cards: list[MCard | Card]
     id: Optional[int] = field(default=None)
 
 
@@ -76,21 +68,17 @@ class AbilityType(Enum):
     hp = "hp"
 
 
-@dataclass(frozen=True, slots=True)
-class AbilityTarget:
-    ownself: bool
-    absolute: bool
-    position: int
-
-    def __post_init__(self) -> None:
-        if self.ownself and self.absolute:
-            raise IncorrectTargetError()
+class TargetType(Enum):
+    ownself = 1
+    opponent = 2
+    teammates = 3
+    all = 4
 
 
 @dataclass(slots=True)
 class SubAbility:
     type: AbilityType
-    target: AbilityTarget
+    target: TargetType
     value: int
 
 

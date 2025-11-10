@@ -9,7 +9,7 @@ from src.database.BaseModel import Base
 
 
 engine = create_async_engine(
-    f"sqlite+aiosqlite:{config.DB_URL}",
+    config.DB_URL,
     echo=True,
 )
 
@@ -21,6 +21,7 @@ AsyncSessionLocal = async_sessionmaker(
 
 async def init_db() -> None:
     async with engine.connect() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
 
 

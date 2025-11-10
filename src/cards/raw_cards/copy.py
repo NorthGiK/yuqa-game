@@ -1,17 +1,18 @@
 import json
 import os
-from typing import Any
 
-from src.cards.models import MCard
+from src.cards.models import MAbilities, MCard
+from src.database.core import AsyncSessionLocal
 
 
-def get_card(id: int) -> bool:
-  return f"{id}.json" in os.listdir("./raw_cards")
+async def _create_raw_cards() -> None:
+	for filename in os.listdir("./dir"):
+		with open(f"./dir/{filename}") as card:
+			new_card = MCard(**json.loads(card.read()))
 
-# def create_card(card: MCard) -> bool:
-#   if get_card(card._prim_id):
-#     return False
+		with open(F"./fold/{filename}") as ability:
+			new_ability = MAbilities(**json.loads(ability.read()))
 
-#   parsed_data: dict[str, Any] = {}
-  
-#   return False
+		async with AsyncSessionLocal() as session:
+			session.add_all((new_ability, new_card))
+			await session.commit()

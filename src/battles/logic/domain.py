@@ -20,7 +20,6 @@ from fastapi import HTTPException
 
 from src import constants
 from src.battles.exceptions import InvalidDeckSizeError
-from src.cards.crud import get_decks
 from src.battles.schemas import SStandardBattleChoice, SSoloBattleChoice
 from src.shared.patterns import Singletone
 from src.battles.logic.common import (

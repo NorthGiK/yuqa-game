@@ -21,13 +21,7 @@ async def get_user(id: int) -> Optional[MUser]:
     stmt = select(MUser).where(MUser.id == id)
 
     async with AsyncSessionLocal() as db_session:
-        db_response: Optional[MUser] = (await db_session.execute(stmt)).scalar_one_or_none()
-
-    if db_response is None:
-        return db_response
-
-    columns = db_response.__table__.columns
-    user: Optional[MUser] = MUser(**columns)
+        user: Optional[MUser] = (await db_session.execute(stmt)).scalar_one_or_none()
 
     return user
 

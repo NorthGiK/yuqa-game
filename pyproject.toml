@@ -7,10 +7,12 @@ requires-python = ">=3.13"
 dependencies = [
     "aiogram>=3.22.0",
     "aiosqlite>=0.21.0",
+    "alembic>=1.17.1",
     "click>=8.3.0",
     "disutils>=1.4.32.post2",
     "dotenv>=0.9.9",
     "fastapi>=0.118.2",
+    "greenlet>=3.2.4",
     "matplotlib>=3.10.7",
     "mypy>=1.18.2",
     "numpy>=2.3.4",

@@ -1,18 +1,19 @@
-from typing import Iterable
+from typing import Annotated, Iterable
+
 from aiogram.types import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
 )
 
-from src.handlers.telegram import constants
 from src.handlers.telegram.constants import Navigation
-from src.cards.models import CardInInventory, Rarity as card_rarity
+from src.cards.models import Card, Rarity
 
 
-_return_to_main_button = [
-    InlineKeyboardButton(
+def _return_to(where: Annotated[str, Navigation]) -> list[InlineKeyboardButton]:
+    return [InlineKeyboardButton(
         text="Назад",
-        callback_data=constants.Navigation.main)]
+        callback_data=where, #type:ignore
+    )]
 
 main = InlineKeyboardMarkup(inline_keyboard=[
     [
@@ -29,28 +30,31 @@ main = InlineKeyboardMarkup(inline_keyboard=[
 ])
 
 profile = InlineKeyboardMarkup(
-    inline_keyboard=[_return_to_main_button],
+    inline_keyboard=[_return_to(Navigation.main)],
 )
 
 inventory = InlineKeyboardMarkup(inline_keyboard=[
-    *([InlineKeyboardButton(text=r.value, callback_data=r.name)] for r in card_rarity),
-    _return_to_main_button,
+    *(
+        [InlineKeyboardButton(
+            text=r.name,
+            callback_data=r.value,
+        )] for r in Rarity
+    ),
+    _return_to(Navigation.main),
 ])
 
-def in_inventory_create(cards: Iterable[CardInInventory]) -> InlineKeyboardMarkup:
+def create_card_in_inventory_callback(id: int) -> str:
+    return f"show_card_in_inventory:{id}"
+
+def in_inventory_create(cards: Iterable[Card]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
             *(
                 [InlineKeyboardButton(
                     text=card.name,
-                    callback_data=str(card.id)
+                    callback_data=create_card_in_inventory_callback(card.id)
                 )] for card in cards
             ),
-            [
-                InlineKeyboardButton(
-                    text="BACK", 
-                    callback_data=constants.Navigation.inventory,
-                ),
-            ],
+            _return_to(Navigation.inventory),
         ])
 
 battle = InlineKeyboardMarkup(inline_keyboard=[
@@ -58,7 +62,5 @@ battle = InlineKeyboardMarkup(inline_keyboard=[
         InlineKeyboardButton(text="Стандарт", callback_data=Navigation.in_battle.standard),
         InlineKeyboardButton(text="Дуо", callback_data=Navigation.in_battle.duo),
     ],
-    [
-        InlineKeyboardButton(text="Назад", callback_data=Navigation.main)
-    ],
+    _return_to(Navigation.main),
 ])

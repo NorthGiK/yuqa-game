@@ -13,8 +13,8 @@ class Navigation:
     @dataclass(frozen=True, slots=True)
     class in_inventory:
         legendary = "LEGENDARY"
-        
-
+        badenko = "BADENKO"
+ 
 
     @dataclass(frozen=True, slots=True)
     class in_battle:

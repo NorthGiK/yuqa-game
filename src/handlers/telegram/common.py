@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Optional, Sequence, Union
 
 from aiogram import F, Router
 from aiogram.filters import (
@@ -11,9 +11,8 @@ from aiogram.types import (
 
 from src.handlers.telegram import constants
 from src.handlers.telegram.components import tabs
-from src.cards.models import CardInInventory, Rarity
-from src.cards.crud import get_card, get_cards_by_rarity
-from src.shared.redis_broker import redis
+from src.cards.models import MCard, Rarity
+from src.cards.crud import get_cards_by_rarity
 from src.users.crud import check_user, create_user, get_user
 
 
@@ -67,11 +66,16 @@ async def _show_cards_for_rarity(
     rarity: Rarity,
 ) -> None:
     user_id: int = clbk.from_user.id #type:ignore
-    cards: list[CardInInventory] | None = await get_cards_by_rarity(rarity=rarity, user_id=user_id)
+    cards: Sequence[MCard] = await get_cards_by_rarity(rarity=rarity, user_id=user_id)
+    if not cards:
+        await clbk.answer()
+        await clbk.message.answer("Something went wrong!")
+
+    cards = [card for card in cards]
 
     await clbk.answer("")
-    await clbk.message.answer(f"Инвентарь {clbk.from_user.username}",
-                              reply_markup=tabs.in_inventory_create(cards)) #type:ignore
+    await clbk.message.answer(f"Инвентарь {clbk.from_user.username}",#type:ignore
+                              reply_markup=tabs.in_inventory_create(cards)) 
     
 
 @router.callback_query(F.data == Rarity.legendary.name)
@@ -91,11 +95,9 @@ async def inventory_handler(clbk: CallbackQuery):
 
     if clbk.message is None:
         return
-
+    
     await clbk.message.answer(
-        # f"роль: {user.role}\n"
         f"рейтинг: {user.rating}\n"
-        # f"всего карт: {user.cards}\n"
         ,
         reply_markup=tabs.profile,
     )
