@@ -14,6 +14,7 @@ from src.handlers.telegram.components import tabs
 from src.cards.models import MCard, Rarity
 from src.cards.crud import get_cards_by_rarity
 from src.users.crud import check_user, create_user, get_user
+from src.shared.utils.redis_broker import redis
 
 
 router = Router()
@@ -66,20 +67,25 @@ async def _show_cards_for_rarity(
     rarity: Rarity,
 ) -> None:
     user_id: int = clbk.from_user.id #type:ignore
-    cards: Sequence[MCard] = await get_cards_by_rarity(rarity=rarity, user_id=user_id)
-    if not cards:
-        await clbk.answer()
-        await clbk.message.answer("Something went wrong!")
+    cards: list[MCard] = await get_cards_by_rarity(rarity=rarity, user_id=user_id)
 
-    cards = [card for card in cards]
+    page_num = int(await redis.get(f"inventory:{rarity.name}"))
+
+    if page_num + 10 > len(cards):
+        end = len(cards)
+    else:
+        end = page_num + 10
+
+    cards = cards[page_num:end]
 
     await clbk.answer("")
     await clbk.message.answer(f"Инвентарь {clbk.from_user.username}",#type:ignore
-                              reply_markup=tabs.in_inventory_create(cards)) 
-    
+                              reply_markup=tabs.in_inventory_create(cards)) #type:ignore 
+
 
 @router.callback_query(F.data == Rarity.legendary.name)
 async def legendary_cards_handler(clbk: CallbackQuery) -> None:
+    await redis.setex(f"inventory:{Rarity.legendary.name}", 999, 0)
     return await _show_cards_for_rarity(clbk=clbk, rarity=Rarity.legendary)
 
 

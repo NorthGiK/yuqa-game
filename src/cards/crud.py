@@ -53,7 +53,7 @@ async def get_deck(user_id: int) -> Optional[Deck]:
 async def get_cards_by_rarity(
     user_id: int,
     rarity: Rarity,
-) -> Sequence[MCard]:
+) -> list[MCard]:
     inventory_query = (
         select(MUser.inventory)
         .where(
@@ -61,16 +61,18 @@ async def get_cards_by_rarity(
         )
         .distinct()
     )
+    async with AsyncSessionLocal() as session:
+        card_ids: list[int] = (await session.execute(inventory_query)).scalar_one()
 
-    card_ids_query = select(
-        MCard
-    ).where(
-        MCard.rarity == rarity,
-        MCard.id.in_(
-            inventory_query,
-        ),
+    card_ids_query = (
+        select(MCard)
+        .where(
+            MCard.rarity == rarity.name,
+            MCard.id.in_(
+                card_ids,
+            )
+        ).distinct()
     )
-
     async with AsyncSessionLocal() as session:
         cards = (await session.execute(card_ids_query)).scalars().all()
 

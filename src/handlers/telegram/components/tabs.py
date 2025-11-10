@@ -6,7 +6,7 @@ from aiogram.types import (
 )
 
 from src.handlers.telegram.constants import Navigation
-from src.cards.models import Card, Rarity
+from src.cards.models import Card, MCard, Rarity
 
 
 def _return_to(where: Annotated[str, Navigation]) -> list[InlineKeyboardButton]:
@@ -36,8 +36,8 @@ profile = InlineKeyboardMarkup(
 inventory = InlineKeyboardMarkup(inline_keyboard=[
     *(
         [InlineKeyboardButton(
-            text=r.name,
-            callback_data=r.value,
+            text=r.value,
+            callback_data=r.name,
         )] for r in Rarity
     ),
     _return_to(Navigation.main),
@@ -46,14 +46,14 @@ inventory = InlineKeyboardMarkup(inline_keyboard=[
 def create_card_in_inventory_callback(id: int) -> str:
     return f"show_card_in_inventory:{id}"
 
-def in_inventory_create(cards: Iterable[Card]) -> InlineKeyboardMarkup:
+def in_inventory_create(cards: Iterable[MCard]) -> InlineKeyboardMarkup:
+    cards_buttons = [[InlineKeyboardButton(
+                    text=f"{card.atk} {card.hp} {card.def_}\n\t{card.name}",
+                    callback_data=create_card_in_inventory_callback(card.id),
+                )] for card in cards]
+
     return InlineKeyboardMarkup(inline_keyboard=[
-            *(
-                [InlineKeyboardButton(
-                    text=card.name,
-                    callback_data=create_card_in_inventory_callback(card.id)
-                )] for card in cards
-            ),
+            *cards_buttons,
             _return_to(Navigation.inventory),
         ])
 
