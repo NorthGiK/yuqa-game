@@ -1,8 +1,8 @@
 from fastapi import APIRouter
 
-from .debug_views import router as v_r
+from src.handlers.telegram.battle import api_router
 
 
 router = APIRouter()
 
-router.include_router(v_r, tags=["view"])
+router.include_router(api_router, tags=["view"])

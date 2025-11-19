@@ -1,16 +1,20 @@
-from sqlalchemy import text
+from dataclasses import dataclass
+from sqlalchemy import Column, Integer, JSON, String
+
+from src.database.BaseModel import Base
 
 
-class MBattleQueue:
-  id: int
-  user_id: int
-  deck: list[int]
+class MBattleQueue(Base):
+    __tablename__ = "battle_queues"
+
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, nullable=False)
+    rating = Column(Integer, nullable=False)
+    type = Column(String, nullable=False)
+    deck = Column(JSON, nullable=False)
 
 
-CREATE_BATTLE_QUEUE_TABLE = text("""
-CREATE TABLE IF NOT EXISTS battle_queues (
-  id INT PRIMARY KEY,
-  user_id INT,
-  deck INT ARRAY
-);
-""")
+@dataclass(slots=True, frozen=True)
+class BattleType:
+    duo = "duo"
+    standard = "standard"

@@ -1,4 +1,4 @@
-from typing import Optional, Sequence, Union
+from typing import Optional, Union
 
 from aiogram import F, Router
 from aiogram.filters import (

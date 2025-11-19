@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Optional, Self
+from typing import Any, Optional
 
 from dataclasses import field
 
@@ -14,7 +14,7 @@ class Battle(ABC):
     """
 
     @abstractmethod
-    def create_battle(self) -> Self:
+    def create_battle() -> Any:
         pass
 
 
@@ -34,29 +34,22 @@ class Battle(ABC):
         pass
 
 
-@dataclass
+@dataclass(slots=True)
 class CommonUserInBattle():
-    """
-    
-    """
     id: int
-    pos: int
     step: Optional[SSoloBattleChoice] = field(default=None)
     action_score: int = field(default=2)
 
 
-@dataclass
+@dataclass(slots=True)
 class CommonCardInBattle():
-    """
-
-    """
     hp: int
     atk: int
     def_: int
     class_: int
 
 
-@dataclass(frozen=True)
+@dataclass(slots=True, frozen=True)
 class DeckSize:
     """
     неизменяемый класс для обозначения размера колоды в бою

@@ -58,8 +58,12 @@ class Card:
 
 @dataclass(slots=True, frozen=True)
 class Deck:
-    cards: list[MCard | Card]
+    cards: list[Card]
     id: Optional[int] = field(default=None)
+
+    @property
+    def get_card_ids(self) -> list[int]:
+        return [card.id for card in self.cards]
 
 
 class AbilityType(Enum):

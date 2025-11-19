@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import (
     Annotated,
-    Callable,
+    Any,
     Iterable,
     Literal,
     Optional,
@@ -16,11 +16,11 @@ from typing import (
 )
 from uuid import UUID, uuid4
 
-from fastapi import HTTPException
-
 from src import constants
 from src.battles.exceptions import InvalidDeckSizeError
+from src.battles.models import BattleType
 from src.battles.schemas import SStandardBattleChoice, SSoloBattleChoice
+from src.cards.models import Deck
 from src.shared.patterns import Singletone
 from src.battles.logic.common import (
     Battle,
@@ -30,7 +30,7 @@ from src.battles.logic.common import (
 )
 
 
-Battle_T = Union["Battle", "BattleWithDeck", "BattleStandard"]
+type Battle_T = Union["Battle", "BattleWithDeck", "BattleStandard", "BattleDuo"]
 
 @dataclass()
 class BattleWithDeck(Battle, ABC):
@@ -59,21 +59,19 @@ class BattleWithDeck(Battle, ABC):
 
 
     @abstractmethod
-    def create_battle[BattleClass](self) -> BattleClass:
+    def create_battle(*args: Any, **kwargs: Any) -> Battle_T:
         pass
 
 
     @abstractmethod
-    def check_cards_hp(self) -> bool:
-        for card in self.deck1:
-            if card.hp <= 0:
-                return False
-        
-        for card in self.deck2:
-            if card.hp <= 0:
-                return False
-            
-        return True
+    def check_cards_hp(self) -> str:
+        if (not all(self.deck1)) and (not all(self.deck2)):
+            return "NIL"
+        elif not all(self.deck1):
+            return "USER1"
+        elif not all(self.deck2):
+            return "USER2"
+        return ""
 
 
     @abstractmethod
@@ -87,13 +85,7 @@ class BattleWithDeck(Battle, ABC):
     @override
     def calc_step(
         self,
-    ) -> Union[
-            Literal[constants.BattleState.local.end],
-            Literal[constants.BattleState.global_.end],
-    ]:
-        if (self.user1_step is None) or (self.user2_step is None):
-            raise HTTPException(400, "bebebe")
-
+    ) -> constants.BattleInProcessOrEnd:
         user1_total_dmg: int = max(
             0,
             max(0, self.user1_step.hits - self.user2_step.blocks)
@@ -144,6 +136,55 @@ class BattleWithDeck(Battle, ABC):
         return constants.BattleState.local.wait_opponent
 
 
+@dataclass(slots=True)
+class BattleDuo(BattleWithDeck):
+    def __post_init__(self) -> None:
+        if (len(self.deck1) != 2) or (len(self.deck2) != 2):
+            raise InvalidDeckSizeError()
+
+        self.deck_size = DeckSize(5)
+
+
+    @override
+    @staticmethod
+    def create_battle(
+        user1: CommonUserInBattle,
+        user2: CommonUserInBattle,
+        deck1: Iterable[CommonCardInBattle],
+        deck2: Iterable[CommonCardInBattle],
+    ) -> "BattleStandard":
+        return BattleStandard(
+            user1=user1,
+            user2=user2,
+            deck1=deck1,
+            deck2=deck2,
+        )
+
+
+    @override
+    def check_cards_hp(self) -> str:
+        return super().check_cards_hp()
+
+    @override
+    def calc_curr_action_scores(self):
+        return super().calc_curr_action_scores()
+
+
+    @override
+    def calc_step(
+        self,
+    ) -> constants.BattleInProcessOrEnd:
+        return super().calc_step()
+
+
+    @override
+    def add_step(
+        self,
+        choice: SStandardBattleChoice,
+    ) -> constants.BattleInProcessOrEnd:
+        return super().add_step(choice)
+
+
 @dataclass
 class BattleStandard(BattleWithDeck):
     def __post_init__(self) -> None:
@@ -191,8 +232,6 @@ class BattleStandard(BattleWithDeck):
         choice: SStandardBattleChoice,
     ) -> constants.BattleInProcessOrEnd:
         return super().add_step(choice)
-
-
 
 
 @dataclass
@@ -276,45 +315,33 @@ class BattleSolo(Battle):
         return constants.BattleState.local.wait_opponent
 
 
-battles_creation: dict[Battle_T, Callable] = {
-    BattleStandard: BattleStandard.create_battle
-}
-
-@dataclass
+@dataclass(slots=True)
 class _BattlesManagement(Singletone):
     battles: dict[str, Battle_T] = field(default_factory=dict)
 
     async def create_battle(
         self,
-        # # type: constants.Battle,
         usr1: int,
         usr2: int,
-        type: Battle_T,
-        deck1: list[int],
-        deck2: list[int],
+        type: Annotated[str, BattleType],
+        deck1: Deck,
+        deck2: Deck,
     ) -> Optional[str]:
-        parsed_deck = await get_decks(ids={
-            usr1: deck1,
-            usr2: deck2,
-        })
-
+        parsed_deck = {usr1: deck1.cards, usr2: deck2.cards}
         if len(parsed_deck[usr1]) != len(parsed_deck[usr2]):
             return None
 
-        if type == BattleStandard:
-            battle = BattleStandard(
-                user1=CommonUserInBattle(usr1),
-                user2=CommonUserInBattle(usr2),
-                deck1=parsed_deck[usr1],
-                deck2=parsed_deck[usr2],
-            )
-        elif type == BattleSolo:
-            battle = BattleSolo(
-                user1=CommonUserInBattle(usr1),
-                user2=CommonUserInBattle(usr2),
-                card1=CommonCardInBattle(**parsed_deck[usr1][0]),
-                card2=CommonCardInBattle(**parsed_deck[usr2][0]),
-            )
+        match type:
+            case BattleType.duo:
+                battle = BattleDuo.create_battle(
+                    user1=CommonUserInBattle(usr1),
+                    user2=CommonUserInBattle(usr2),
+                    deck1=parsed_deck[usr1],
+                    deck2=parsed_deck[usr2],
+                )
+
+            case _:
+                print("pizdec")
 
         id: str = battle.id
         self.battles[id] = battle

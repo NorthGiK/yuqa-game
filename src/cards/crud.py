@@ -1,8 +1,9 @@
+from dataclasses import asdict
 from typing import Any, Iterable, Optional, Sequence
 
 from sqlalchemy import Select, select
 
-from src.cards.models import Deck, MCard, Rarity
+from src.cards.models import Card, Deck, MCard, Rarity
 from src.database.core import AsyncSessionLocal
 from src.users.models import MUser
 
@@ -38,16 +39,23 @@ async def get_cards(ids: Iterable[int]) -> Optional[Sequence[MCard]]:
     return cards
 
 async def get_deck(user_id: int) -> Optional[Deck]:
-    user_inventory_query = select(MUser.inventory).where(MUser.id == user_id).distinct()
-    deck_query = select(MCard).where(MCard.id.in_(user_inventory_query)).distinct()
-    
+    user_inventory_query = select(MUser.deck).where(MUser.id == user_id)
+    async with AsyncSessionLocal() as session:
+        inventory = (await session.execute(user_inventory_query)).scalar_one_or_none()
+
+    deck_query = select(MCard).where(MCard.id.in_(inventory))
     async with AsyncSessionLocal() as session:
         cards = (await session.execute(deck_query)).scalars().all()
 
-    if not cards:
-        return None
-
-    return Deck(id=user_id, cards=[card for card in cards])
+    return Deck(id=user_id, cards=[Card(
+        id=card.id,
+        name=card.name,
+        universe=card.universe,
+        rarity=card.rarity,
+        atk=card.atk,
+        hp=card.hp,
+        def_=card.def_,
+    ) for card in cards])
 
 
 async def get_cards_by_rarity(

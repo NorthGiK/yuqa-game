@@ -1,9 +1,8 @@
-from pydantic import BaseModel
-
-from src import constants
+from dataclasses import dataclass
 
 
-class SBaseChoice(BaseModel):
+@dataclass
+class SBaseChoice:
     user_id: int
     battle_id: str
 
@@ -12,19 +11,12 @@ class SBaseChoice(BaseModel):
     bonus: int
 
 
+@dataclass(slots=True)
 class SStandardBattleChoice(SBaseChoice):
     target: int
     selected_card: int
 
 
+@dataclass(slots=True)
 class SSoloBattleChoice(SBaseChoice):
   ...
-
-
-class SCard(BaseModel):
-    hp: int
-    atk: int
-    pos: int
-    def_: int
-    class_: constants.Card.class_
-    rarity: constants.Card.rarity
