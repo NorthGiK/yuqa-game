@@ -1,8 +1,8 @@
-from dataclasses import asdict
 from typing import Any, Iterable, Optional, Sequence
 
 from sqlalchemy import Select, select
 
+from src.battles.logic.common import CommonCardInBattle
 from src.cards.models import Card, Deck, MCard, Rarity
 from src.database.core import AsyncSessionLocal
 from src.users.models import MUser
@@ -36,7 +36,16 @@ async def get_cards(ids: Iterable[int]) -> Optional[Sequence[MCard]]:
     query = select(MCard).where(MCard.id.in_(ids))
     cards: Sequence[MCard] | None = await _base_get_cards(query=query)
 
-    return cards
+    return CommonCardInBattle.from_model(cards)
+
+
+async def get_cards_by_user_id(id: int) -> Optional[list[MCard]]:
+    query = select(MUser.deck).where(MUser.id == id)
+    async with AsyncSessionLocal() as session:
+        raw_deck: Optional[list[int]] = (await session.execute(query)).scalar_one_or_none()
+
+    return await get_cards(raw_deck)
+
 
 async def get_deck(user_id: int) -> Optional[Deck]:
     user_inventory_query = select(MUser.deck).where(MUser.id == user_id)

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from sqlalchemy import Column, Integer, JSON, String
+from sqlalchemy import Column, Integer, String
 
 from src.database.BaseModel import Base
 
@@ -11,7 +11,6 @@ class MBattleQueue(Base):
     user_id = Column(Integer, nullable=False)
     rating = Column(Integer, nullable=False)
     type = Column(String, nullable=False)
-    deck = Column(JSON, nullable=False)
 
 
 @dataclass(slots=True, frozen=True)

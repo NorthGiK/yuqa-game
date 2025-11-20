@@ -4,11 +4,11 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
+from pprint import pprint
 from typing import (
     Annotated,
     Any,
     Iterable,
-    Literal,
     Optional,
     Sequence,
     Union,
@@ -17,9 +17,9 @@ from typing import (
 from uuid import UUID, uuid4
 
 from src import constants
-from src.battles.exceptions import InvalidDeckSizeError
 from src.battles.models import BattleType
 from src.battles.schemas import SStandardBattleChoice, SSoloBattleChoice
+from src.cards.crud import get_cards, get_cards_by_user_id, get_deck
 from src.cards.models import Deck
 from src.shared.patterns import Singletone
 from src.battles.logic.common import (
@@ -32,13 +32,15 @@ from src.battles.logic.common import (
 
 type Battle_T = Union["Battle", "BattleWithDeck", "BattleStandard", "BattleDuo"]
 
-@dataclass()
+@dataclass
 class BattleWithDeck(Battle, ABC):
     user1: CommonUserInBattle
     user2: CommonUserInBattle
     deck1: Sequence[CommonCardInBattle]
     deck2: Sequence[CommonCardInBattle]
-    deck_size: DeckSize = field(default=DeckSize(0))
+    user1_step: Optional[SStandardBattleChoice] = None
+    user2_step: Optional[SStandardBattleChoice] = None
+    deck_size: DeckSize = DeckSize(0)
     round: int = field(default=1)
     id: Annotated[str, UUID] = field(default_factory=lambda: str(uuid4()))
 
@@ -54,7 +56,7 @@ class BattleWithDeck(Battle, ABC):
             f"user2_action_score: {self.user2.action_score}\n"
             f"user1_step: {self.user1_step}\n"
             f"user2_step: {self.user2_step}\n"
-            f"id: {self.id}\n"
+            f"type: {self.__class__}"
         )
 
 
@@ -77,33 +79,36 @@ class BattleWithDeck(Battle, ABC):
     @abstractmethod
     def calc_curr_action_scores(self) -> None:
         self.round += 1
-        self.user1.action_score = max(7, self.round * 2) + self.user1_step.bonus
-        self.user2.action_score = max(7, self.round * 2) + self.user2_step.bonus        
+        self.user1.action_score = max(7, self.round * 2) + self.user1.step.bonus
+        self.user2.action_score = max(7, self.round * 2) + self.user2.step.bonus        
 
 
     @abstractmethod
     @override
     def calc_step(
         self,
-    ) -> constants.BattleInProcessOrEnd:
-        user1_total_dmg: int = max(
+    ) -> constants.BattleInProcessOrEnd | None:
+        user1_total_dmg = max(
             0,
-            max(0, self.user1_step.hits - self.user2_step.blocks)
-            * self.deck1[self.user1_step.selected_card].atk,
+            (self.user1.step.hits - self.user2.step.blocks)
+            * self.deck1[self.user1.step.selected_card - 1].atk
+            - self.deck2[self.user1.step.target - 1].def_
         )
+
         user2_total_dmg: int = max(
             0,
-            max(0, self.user2_step.hits - self.user1_step.blocks)
-            * self.deck2[self.user2_step.selected_card].atk,
+            (self.user2.step.hits - self.user1.step.blocks)
+            * self.deck2[self.user2.step.selected_card - 1].atk
+            - self.deck1[self.user2.step.selected_card - 1].def_
         )
 
-        hp1 = self.deck2[self.user1_step.target - 1].hp
-        hp2 = self.deck2[self.user1_step.target - 1].hp
+        hp1 = self.deck1[self.user2.step.target - 1].hp
+        hp2 = self.deck2[self.user1.step.target - 1].hp
 
-        self.deck2[self.user1_step.target - 1].hp = (
+        self.deck1[self.user2.step.target - 1].hp = (
             max(0, hp1 - user2_total_dmg) - user1_total_dmg
         )
-        self.deck2[self.user1_step.target - 1].hp = (
+        self.deck2[self.user1.step.target - 1].hp = (
             max(0, hp2 - user1_total_dmg) - user2_total_dmg
         )
 
@@ -123,14 +128,14 @@ class BattleWithDeck(Battle, ABC):
         self,
         choice: SStandardBattleChoice,
     ) -> constants.BattleInProcessOrEnd:
-        if choice.user_id == self.user1:
-            self.user1_step = choice
-        elif choice.user_id == self.user2:
-            self.user2_step = choice
+        if choice.user_id == self.user1.id:
+            self.user1.step = choice
+        elif choice.user_id == self.user2.id:
+            self.user2.step = choice
         else:
-            Exception("WTF EXCEPTION!!??!!??")
+            raise Exception("WTF EXCEPTION!!??!!??")
 
-        if self.user1_step and self.user1_step:
+        if (self.user1.step is not None) and (self.user2.step is not None):
             return self.calc_step()
 
         return constants.BattleState.local.wait_opponent
@@ -138,13 +143,6 @@ class BattleWithDeck(Battle, ABC):
 
 @dataclass(slots=True)
 class BattleDuo(BattleWithDeck):
-    def __post_init__(self) -> None:
-        if (len(self.deck1) != 2) or (len(self.deck2) != 2):
-            raise InvalidDeckSizeError()
-
-        self.deck_size = DeckSize(5)
-
-
     @override
     @staticmethod
     def create_battle(
@@ -187,13 +185,6 @@ class BattleDuo(BattleWithDeck):
 
 @dataclass
 class BattleStandard(BattleWithDeck):
-    def __post_init__(self) -> None:
-        if (len(self.deck1)) != 5 or (len(self.deck2) != 5):
-            raise InvalidDeckSizeError()
-
-        self.deck_size = DeckSize(5)
-
-
     @override
     def create_battle(
         self,
@@ -324,20 +315,17 @@ class _BattlesManagement(Singletone):
         usr1: int,
         usr2: int,
         type: Annotated[str, BattleType],
-        deck1: Deck,
-        deck2: Deck,
     ) -> Optional[str]:
-        parsed_deck = {usr1: deck1.cards, usr2: deck2.cards}
-        if len(parsed_deck[usr1]) != len(parsed_deck[usr2]):
-            return None
+        deck1 = await get_cards_by_user_id(usr1)
+        deck2 = await get_cards_by_user_id(usr2)
 
         match type:
             case BattleType.duo:
                 battle = BattleDuo.create_battle(
                     user1=CommonUserInBattle(usr1),
                     user2=CommonUserInBattle(usr2),
-                    deck1=parsed_deck[usr1],
-                    deck2=parsed_deck[usr2],
+                    deck1=deck1,
+                    deck2=deck2,
                 )
 
             case _:
