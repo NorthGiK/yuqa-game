@@ -5,7 +5,7 @@ from typing import Optional, Any
 from aiogram import Bot, Dispatcher
 from dotenv import load_dotenv
 
-from src.shared.patterns import Singletone
+from src.utils.patterns import Singletone
 
 
 load_dotenv()

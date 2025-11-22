@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import Literal, Union
+from typing import Literal
 
 
 class BattleState:
@@ -13,7 +13,8 @@ class BattleState:
       end = "END_OF_ROUND"
 
 
-BattleInProcessOrEnd = Union[
-        Literal[BattleState.local.wait_opponent],
-        Literal[BattleState.global_.end],
+BattleInProcessOrEnd = Literal[
+        BattleState.local.wait_opponent,
+        BattleState.local.end,
+        BattleState.global_.end,
 ]

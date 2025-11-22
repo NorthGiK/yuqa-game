@@ -14,7 +14,7 @@ from src.handlers.telegram.components import tabs
 from src.cards.models import MCard, Rarity
 from src.cards.crud import get_cards_by_rarity
 from src.users.crud import check_user, create_user, get_user
-from src.shared.utils.redis_broker import redis
+from src.utils.redis_broker import redis
 
 
 router = Router()

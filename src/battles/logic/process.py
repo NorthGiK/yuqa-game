@@ -2,7 +2,6 @@ from typing import Annotated, Optional
 
 from sqlalchemy import select
 
-from src.battles.logic.common import CommonCardInBattle
 from src.battles.logic.domain import (
   Battle_T,
   BattleStandard, 
@@ -11,10 +10,14 @@ from src.battles.logic.domain import (
 from src.battles.models import BattleType, MBattleQueue
 from src import constants
 from src.battles.schemas import SStandardBattleChoice
-from src.cards.models import Deck, MCard
 from src.database.core import AsyncSessionLocal
+from src.logs import dev_configure, get_logger
 from src.users.models import MUser
+from src.utils.decorators import log_func_call
 
+
+log = get_logger(__name__)
+dev_configure()
 
 async def create_queue(
 	user_id: int,
@@ -27,6 +30,7 @@ async def create_queue(
 		await session.commit()
 
 
+@log_func_call(log)
 async def init_battle(
     user_id: int, 
     queue: MBattleQueue, 
@@ -46,6 +50,7 @@ async def init_battle(
 	return battle_id
 
 
+@log_func_call(log)
 async def start_battle(
   	user_id: int,
 	type: Annotated[str, Battle_T],
@@ -75,6 +80,7 @@ async def start_battle(
   	)
 
 
+@log_func_call(log)
 async def handle_standard_battle(
   	battle: BattleStandard,
   	choice: SStandardBattleChoice,
@@ -84,9 +90,13 @@ async def handle_standard_battle(
 	)
 	return battle_status
 
-async def handle_user_step(choice: SStandardBattleChoice):
-  battle = BattlesManagement.get_battle(choice.battle_id)
-  try:
-    return battle.add_step(choice=choice)
-  except AttributeError:
-    return None
+
+@log_func_call(log)
+async def handle_user_step(
+		choice: SStandardBattleChoice,
+	) -> Optional[constants.BattleInProcessOrEnd]:
+	battle = BattlesManagement.get_battle(choice.battle_id)
+	if battle:
+		return battle.add_step(choice=choice)
+
+	return None

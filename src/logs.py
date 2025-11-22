@@ -1,12 +1,21 @@
 import logging
 
 
-log_format = "%(asctime) %(module)"
-date_format = "%Y-%m-%s"
+log_format = "%(levelname)s: %(asctime)s `%(name)s` - %(message)s"
+date_format = "%m/%d/%Y %I:%M:%S %p"
 
 def get_logger(module_name: str) -> logging.Logger:
     return logging.getLogger(module_name)
-  
+
+
+def dev_configure() -> None:
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format=log_format,
+        datefmt=date_format,
+    )
+
+
 def configure_logging() -> None:
     logging.basicConfig(
         filename="test.log",

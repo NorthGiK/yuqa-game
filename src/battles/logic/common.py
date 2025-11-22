@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, overload
 
 from dataclasses import field
 
 from src import constants
+from src.battles.exceptions import InvalidDeckSizeError
 from src.battles.schemas import SStandardBattleChoice
 from src.cards.models import Card, MCard
 
@@ -15,7 +16,7 @@ class Battle(ABC):
     """
 
     @abstractmethod
-    def create_battle() -> Any:
+    def create_battle(*args: Any, **kwargs: Any) -> Any:
         pass
 
 
@@ -43,13 +44,15 @@ class CommonUserInBattle():
 
 
 @dataclass(slots=True)
-class CommonCardInBattle():
+class CommonCardInBattle(ABC):
     hp: int
     atk: int
     def_: int
     class_: int
 
+
     @staticmethod
+    @abstractmethod
     def _get_card(model: Union[MCard, Card]) -> "CommonCardInBattle":
         return CommonCardInBattle(
             hp=model.hp, #type:ignore
@@ -58,13 +61,27 @@ class CommonCardInBattle():
             class_=0,
         )
 
+
     @staticmethod
-    def from_model(model):
+    @abstractmethod
+    @overload
+    def from_model(model: Union[Card, MCard]) -> list["CommonCardInBattle"]:
+        ...
+
+    @staticmethod
+    @abstractmethod
+    @overload
+    def from_model(model: Union[list[Card], list[MCard]]) -> list["CommonCardInBattle"]:
+        ...
+
+    @staticmethod
+    @abstractmethod
+    def from_model(model: Union[Card, MCard, list[Card], list[MCard]]) -> list["CommonCardInBattle"]:
         self = CommonCardInBattle
         if isinstance(model, list):
             return [self._get_card(card) for card in model]
-        
-        return self._get_card(model)
+
+        return [self._get_card(model)]
 
 
 @dataclass(slots=True, frozen=True)
@@ -73,3 +90,7 @@ class DeckSize:
     неизменяемый класс для обозначения размера колоды в бою
     """
     value: int = field(default=0)
+
+    def __post_init__(self) -> None:
+        if self.value < 0:
+            raise InvalidDeckSizeError()

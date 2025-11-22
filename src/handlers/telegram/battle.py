@@ -1,28 +1,37 @@
-from datetime import datetime
-from typing import Annotated
-from uuid import UUID
+from dataclasses import asdict
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
+from datetime import datetime
 from fastapi import APIRouter
+
+from typing import Annotated, Optional
+from uuid import UUID
 from pydantic import BaseModel
 
 from src.battles.logic.domain import BattlesManagement
 from src.battles.logic.process import handle_user_step, start_battle
+from src.battles.models import BattleType
 from src.battles.schemas import SStandardBattleChoice
 from src.cards.crud import get_deck
-from src.cards.models import Deck
 from src.constants import BattleInProcessOrEnd
 from src.database.core import AsyncSessionLocal
 from src.handlers.telegram.constants import Navigation
+from src.logs import get_logger, dev_configure
 from src.users.models import MUser
+from src.utils.decorators import log_func_call
 
 
 router = Router()
 api_router = APIRouter()
 
+log = get_logger(__name__)
+dev_configure()
+
+@log_func_call(log)
 @api_router.get("/battles")
 async def get_all_battles_handler():
-    return {id: repr(data) for id, data in BattlesManagement.battles.items()}
+    return {id: asdict(data) for id, data in BattlesManagement.battles.items()} #type:ignore
+
 
 class User(BaseModel):
     rating: int
@@ -30,6 +39,7 @@ class User(BaseModel):
     deck: list[int]
     active: bool
     created_at: datetime
+
 
 @api_router.post("/create_user")
 async def create_user_handler(data: User):
@@ -39,6 +49,7 @@ async def create_user_handler(data: User):
         await session.commit()
     
     return "OK"
+
 
 @api_router.post("/start_battle")
 async def start_duo_battle_api(
@@ -57,7 +68,7 @@ async def process_battle_handler(
     bonus: int,
     target: int,
     selected_card: int,
-) -> BattleInProcessOrEnd | None:
+) -> Optional[BattleInProcessOrEnd]:
     deck = await get_deck(user_id=user_id)
     if deck is None:
         return None
@@ -78,8 +89,8 @@ async def start_duo_battle(clbk: CallbackQuery) -> None:
     user_id: int = clbk.from_user.id
     deck = await get_deck(user_id=user_id)
     if deck is None:
-        clbk.answer(f"nihua ne work")
+        clbk.answer(f"ne work")
         return
 
     await clbk.answer("goog")
-    await start_battle(clbk.from_user.id, deck=deck, type="duo")
+    await start_battle(clbk.from_user.id, type=BattleType.duo)
