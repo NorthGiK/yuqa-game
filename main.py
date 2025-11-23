@@ -3,11 +3,10 @@ import asyncio
 from fastapi import FastAPI
 import uvicorn
 
-#  from aiohttp import web
-
 from src.core.startup_configure import on_shutdown, on_startup
 from src.handlers.telegram.router import router
 from src.handlers.api.router import router
+
 
 app = FastAPI(debug=True, title="Yuqa", docs_url="/")
 app.include_router(router)

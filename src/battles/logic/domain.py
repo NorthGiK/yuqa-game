@@ -3,8 +3,7 @@
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import asdict, dataclass, field
-from pprint import pprint
+from dataclasses import dataclass, field
 from typing import (
     Annotated,
     Any,
@@ -15,9 +14,16 @@ from typing import (
 from uuid import UUID, uuid4
 
 from src import constants
+from src.battles.exceptions import (
+    SelectedCardWithZeroHP,
+    TargetCardWithZeroHP,
+    UserNotFoundInBattle,
+)
 from src.battles.models import BattleType
-from src.battles.schemas import SStandardBattleChoice, SSoloBattleChoice
+from src.battles.schemas import SStandardBattleChoice
 from src.cards.crud import get_cards_by_user_id 
+from src.logs import dev_configure, get_logger
+from src.utils.decorators import log_func_call
 from src.utils.patterns import Singletone
 from src.battles.logic.common import (
     Battle,
@@ -26,6 +32,9 @@ from src.battles.logic.common import (
     DeckSize,
 )
 
+
+log = get_logger(__name__)
+dev_configure()
 
 type Battle_T = Union["Battle", "BattleWithDeck", "BattleStandard", "BattleDuo"]
 
@@ -40,22 +49,41 @@ class BattleWithDeck(Battle, ABC):
     id: Annotated[str, UUID] = field(default_factory=lambda: str(uuid4()))
 
     @abstractmethod
+    @log_func_call(log)
     def create_battle(*args: Any, **kwargs: Any) -> Battle_T:
         pass
 
 
     @abstractmethod
-    def check_cards_hp(self) -> str:
-        if (not all(self.deck1)) and (not all(self.deck2)):
-            return "NIL"
-        elif not all(self.deck1):
-            return "USER1"
-        elif not all(self.deck2):
-            return "USER2"
-        return ""
+    @log_func_call(log)
+    def get_user(self, id: int) -> CommonUserInBattle:
+        match id:
+            case self.user1.id:
+                return self.user1
+            
+            case self.user2.id:
+                return self.user2
+            
+            case _:
+                raise UserNotFoundInBattle(module_of_err=__file__)
 
 
     @abstractmethod
+    @log_func_call(log)
+    def check_cards_hp(self) -> str:
+        not_deck1 = not all(self.deck1)
+        not_deck2 = not all(self.deck2)
+
+        if not_deck1 and not_deck2:
+            return "NIL"
+        elif not_deck1:
+            return "USER1"
+        elif not_deck2:
+            return "USER2"
+
+
+    @abstractmethod
+    @log_func_call(log)
     def calc_curr_action_scores(self) -> None:
         self.round += 1
         self.user1.action_score = max(7, round(self.round * 1.5)) + self.user1.step.bonus #type:ignore
@@ -63,12 +91,29 @@ class BattleWithDeck(Battle, ABC):
 
 
     @abstractmethod
+    @log_func_call(log)
     @override
     def calc_step(
         self,
     ) -> constants.BattleInProcessOrEnd:
         if (self.user1.step is None) or (self.user2.step is None):
             return constants.BattleState.local.wait_opponent
+
+        if (
+            self.deck1[self.user1.step.selected_card].hp <= 0
+            or
+            self.deck2[self.user2.step.selected_card].hp <= 0
+        ):
+            raise SelectedCardWithZeroHP(module_of_err=__file__)
+
+
+        if (
+            self.deck2[self.user1.step.target].hp <= 0
+            and
+            self.deck1[self.user2.step.target].hp <= 0
+        ):
+            raise TargetCardWithZeroHP(module_of_err=__file__)
+
 
         user1_total_dmg = max(
             0,
@@ -96,23 +141,19 @@ class BattleWithDeck(Battle, ABC):
         self.calc_curr_action_scores()
         self.user1.step = None
         self.user2.step = None
-        
-        pprint(asdict(self))
+ 
         return constants.BattleState.local.end
 
 
     @abstractmethod
+    @log_func_call(log)
     @override
     def add_step(
         self,
         choice: SStandardBattleChoice,
     ) -> constants.BattleInProcessOrEnd:
-        if choice.user_id == self.user1.id:
-            self.user1.step = choice
-        elif choice.user_id == self.user2.id:
-            self.user2.step = choice
-        else:
-            raise Exception("WTF EXCEPTION!!??!!??")
+        user = self.get_user(choice.user_id)
+        user.step = choice
 
         return self.calc_step()
 
@@ -120,6 +161,7 @@ class BattleWithDeck(Battle, ABC):
 @dataclass(slots=True)
 class BattleDuo(BattleWithDeck):
     @override
+    @log_func_call(log)
     @staticmethod
     def create_battle(
         user1: CommonUserInBattle,
@@ -162,8 +204,9 @@ class BattleDuo(BattleWithDeck):
 @dataclass
 class BattleStandard(BattleWithDeck):
     @override
+    @log_func_call(log)
+    @staticmethod
     def create_battle(
-        self,
         user1: CommonUserInBattle,
         user2: CommonUserInBattle,
         deck1: list[CommonCardInBattle],
@@ -176,6 +219,17 @@ class BattleStandard(BattleWithDeck):
             deck2=deck2,
         )
 
+    def get_user(self, id: int) -> CommonUserInBattle:
+        match id:
+            case self.user1.id:
+                return self.user1
+            
+            case self.user2.id:
+                return self.user2
+            
+            case _:
+                raise UserNotFoundInBattle(module_of_err=__file__)
+        
 
     @override
     def check_cards_hp(self) -> str:
@@ -201,89 +255,11 @@ class BattleStandard(BattleWithDeck):
         return super().add_step(choice)
 
 
-@dataclass
-class BattleSolo(Battle):
-    """
-    battle instance that provided battle between 2 players with 1 card only
-    """
-
-    user1: CommonUserInBattle
-    user2: CommonUserInBattle
-    card1: CommonCardInBattle
-    card2: CommonCardInBattle
-
-    user1_step: Optional[SSoloBattleChoice] = field(default=None)
-    user2_step: Optional[SSoloBattleChoice] = field(default=None)
-
-    id: str = field(default_factory=lambda : str(uuid4()))
-    round: int = field(default=1)
-
-
-    @override
-    def create_battle(
-        self,
-        user1: CommonUserInBattle,
-        user2: CommonUserInBattle,
-        card1: CommonCardInBattle,
-        card2: CommonCardInBattle,
-    ) -> "BattleSolo":
-        return BattleSolo(
-            user1=user1,
-            user2=user2,
-            card1=card1,
-            card2=card2,
-        )
-
-
-    def calc_current_action_scores(self) -> None:
-        self.user1.action_score = max(7, self.round * 2) + self.user1.step.bonus #type:ignore
-        self.user2.action_score = max(7, self.round * 2) + self.user2.step.bonus #type:ignore
-
-
-    def calc_current_damages(self) -> None:
-        user1_total_hits: int = max(0, self.user1_step.hits - self.user2_step.blocks) #type:ignore
-        user2_total_hits: int = max(0, self.user2_step.hits - self.user1_step.blocks) #type:ignore
-        self.card1.hp = max(0, self.card1.hp - user2_total_hits)
-        self.card2.hp = max(0, self.card2.hp - user1_total_hits)        
-
-
-    @override
-    def calc_step(self) -> constants.BattleInProcessOrEnd:
-        self.calc_current_damages()
-
-        if (not self.card1.hp) or (not self.card2.hp):
-            return constants.BattleState.global_.end
-
-        self.calc_current_action_scores()
-        self.user1.step = None
-        self.user2.step = None
-        self.round += 1
-
-        return constants.BattleState.local.wait_opponent
-
-
-    @override
-    def add_step(
-        self,
-        user_id: int,
-        choice: SStandardBattleChoice,
-    ) -> constants.BattleInProcessOrEnd:
-        if user_id == self.user1:
-            self.user1.step = choice
-        else:
-            self.user2.step = choice
-
-        if self.user1.step and self.user2.step:
-            battle_status = self.calc_step()
-            return battle_status
-
-        return constants.BattleState.local.wait_opponent
-
-
 @dataclass(slots=True)
 class _BattlesManagement(Singletone):
     battles: dict[str, Battle_T] = field(default_factory=dict) #type:ignore
 
+    @log_func_call(log)
     async def create_battle(
         self,
         usr1: int,
@@ -315,14 +291,16 @@ class _BattlesManagement(Singletone):
         return id
 
 
+    @log_func_call(log)
     def get_battle(self, id: str) -> Optional[Battle_T]:
         return self.battles.get(id, None)
 
 
+    @log_func_call(log)
     def remove_battle(self, battle_id: str) -> bool:
         if self.battles.get(battle_id):
-            del self.battles[battle_id]
-            return True
+            is_delete = self.battles.pop(battle_id, False)
+            return bool(is_delete)
 
         return False
 

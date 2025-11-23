@@ -75,8 +75,9 @@ class AbilityType(Enum):
 class TargetType(Enum):
     ownself = 1
     opponent = 2
-    teammates = 3
-    all = 4
+    teammates_and_own = 3
+    teammates_only = 4
+    all = 5
 
 
 @dataclass(slots=True)
@@ -89,7 +90,7 @@ class SubAbility:
 @dataclass(slots=True)
 class Ability:
     sub_abilities: Iterable[SubAbility]
-    card_id: int
     cooldown: int
     duration: int
     cost: int
+    card_id: Optional[int] = None

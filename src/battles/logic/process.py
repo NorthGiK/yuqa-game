@@ -19,6 +19,7 @@ from src.utils.decorators import log_func_call
 log = get_logger(__name__)
 dev_configure()
 
+@log_func_call(log)
 async def create_queue(
 	user_id: int,
 	type: Annotated[str, BattleType],
@@ -89,14 +90,3 @@ async def handle_standard_battle(
 		choice=choice,
 	)
 	return battle_status
-
-
-@log_func_call(log)
-async def handle_user_step(
-		choice: SStandardBattleChoice,
-	) -> Optional[constants.BattleInProcessOrEnd]:
-	battle = BattlesManagement.get_battle(choice.battle_id)
-	if battle:
-		return battle.add_step(choice=choice)
-
-	return None

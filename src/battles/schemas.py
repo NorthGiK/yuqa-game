@@ -15,8 +15,3 @@ class SBaseChoice:
 class SStandardBattleChoice(SBaseChoice):
     target: int
     selected_card: int
-
-
-@dataclass(slots=True)
-class SSoloBattleChoice(SBaseChoice):
-  ...

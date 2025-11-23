@@ -2,14 +2,13 @@ from dataclasses import asdict
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
 from datetime import datetime
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
-from typing import Annotated, Optional
-from uuid import UUID
+from typing import Optional
 from pydantic import BaseModel
 
 from src.battles.logic.domain import BattlesManagement
-from src.battles.logic.process import handle_user_step, start_battle
+from src.battles.logic.process import start_battle
 from src.battles.models import BattleType
 from src.battles.schemas import SStandardBattleChoice
 from src.cards.crud import get_deck
@@ -18,7 +17,6 @@ from src.database.core import AsyncSessionLocal
 from src.handlers.telegram.constants import Navigation
 from src.logs import get_logger, dev_configure
 from src.users.models import MUser
-from src.utils.decorators import log_func_call
 
 
 router = Router()
@@ -27,7 +25,6 @@ api_router = APIRouter()
 log = get_logger(__name__)
 dev_configure()
 
-@log_func_call(log)
 @api_router.get("/battles")
 async def get_all_battles_handler():
     return {id: asdict(data) for id, data in BattlesManagement.battles.items()} #type:ignore
@@ -37,17 +34,22 @@ class User(BaseModel):
     rating: int
     inventory: list[int]
     deck: list[int]
-    active: bool
     created_at: datetime
+    active: bool = True
 
 
 @api_router.post("/create_user")
 async def create_user_handler(data: User):
+    if data.inventory == [0]:
+        data.inventory = [1, 2]
+    if data.deck == [0]:
+        data.deck = [1,2]
+
     user = MUser(**data.model_dump())
     async with AsyncSessionLocal() as session:
         session.add(user)
         await session.commit()
-    
+
     return "OK"
 
 
@@ -60,28 +62,22 @@ async def start_duo_battle_api(
 
 
 @api_router.post("/process_battle")
-async def process_battle_handler(
-    user_id: int,
-    battle_id: Annotated[str, UUID],
-    hits: int,
-    blocks: int,
-    bonus: int,
-    target: int,
-    selected_card: int,
-) -> Optional[BattleInProcessOrEnd]:
-    deck = await get_deck(user_id=user_id)
-    if deck is None:
+async def handle_user_step(
+		choice: SStandardBattleChoice,
+	) -> Optional[BattleInProcessOrEnd]:
+    battle = BattlesManagement.get_battle(choice.battle_id)
+    if battle is None:
         return None
 
-    return await handle_user_step(SStandardBattleChoice(
-        user_id=user_id,
-        battle_id=battle_id,
-        hits=hits,
-        blocks=blocks,
-        bonus=bonus,
-        target=target,
-        selected_card=selected_card,
-    ))
+    used_bonus: int = sum((choice.hits, choice.blocks, choice.bonus))
+    user_bonus: int = battle.get_user(choice.user_id).action_score #type:ignore
+
+    if used_bonus > user_bonus:
+        raise HTTPException(401, "too much used bonus!")
+    elif user_bonus < user_bonus:
+        raise HTTPException(401, "to few used bonus!")
+
+    return battle.add_step(choice=choice)
 
 
 @router.callback_query(F.data == Navigation.in_battle.duo)
