@@ -10,7 +10,7 @@ def get_logger(module_name: str) -> logging.Logger:
 
 def dev_configure() -> None:
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=logging.INFO,
         format=log_format,
         datefmt=date_format,
     )

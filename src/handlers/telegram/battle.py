@@ -27,7 +27,7 @@ dev_configure()
 
 @api_router.get("/battles")
 async def get_all_battles_handler():
-    return {id: asdict(data) for id, data in BattlesManagement.battles.items()} #type:ignore
+    return {id: asdict(data, dict_factory=lambda: ...) for id, data in BattlesManagement.battles.items()} #type:ignore
 
 
 class User(BaseModel):
@@ -57,7 +57,7 @@ async def create_user_handler(data: User):
 async def start_duo_battle_api(
     user_id: int,
     type: str,
-):
+) -> Optional[str]:
     return await start_battle(user_id=user_id, type=type)
 
 
@@ -70,11 +70,11 @@ async def handle_user_step(
         return None
 
     used_bonus: int = sum((choice.hits, choice.blocks, choice.bonus))
-    user_bonus: int = battle.get_user(choice.user_id).action_score #type:ignore
+    user_action_score: int = battle.get_user(choice.user_id).action_score #type:ignore
 
-    if used_bonus > user_bonus:
+    if used_bonus > user_action_score:
         raise HTTPException(401, "too much used bonus!")
-    elif user_bonus < user_bonus:
+    elif used_bonus < user_action_score:
         raise HTTPException(401, "to few used bonus!")
 
     return battle.add_step(choice=choice)

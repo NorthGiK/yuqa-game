@@ -46,13 +46,14 @@ class Rarity(Enum):
 
 @dataclass(slots=True)
 class Card:
-    id: int
-    name: str
-    universe: str
-    rarity: Rarity
     atk: int
     hp: int
     def_: int
+    ability: 'Ability'
+    id: int = None #type:ignore
+    name: str = None #type:ignore
+    universe: str = None #type:ignore
+    rarity: Rarity = None #type:ignore
     pos: Optional[int] = field(default=None)
 
 
@@ -80,7 +81,7 @@ class TargetType(Enum):
     all = 5
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class SubAbility:
     type: AbilityType
     target: TargetType

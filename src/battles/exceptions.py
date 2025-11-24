@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(slots=True, eq=False, frozen=True, kw_only=True)
@@ -50,4 +51,18 @@ class TargetCardWithZeroHP(Exception):
             "выбрана карта для атаки с нулевым здоровьем!"
             "\n"
             + self.module_of_err
+        )
+
+
+@dataclass(slots=True, eq=False, frozen=True, kw_only=True)
+class InvalidTargetTypeError(Exception):
+    module_of_err: str = ""
+    target: Any = None
+
+    @property
+    def message(self) -> str:
+        return (
+            f"Invalid Target Type {self.target if self.target else ""}"
+            "\n"
+            + self. module_of_err
         )

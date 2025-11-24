@@ -38,7 +38,7 @@ async def get_cards(ids: Iterable[int]) -> Optional[list[CommonCardInBattle]]:
     if cards is None:
         return None
 
-    return CommonCardInBattle.from_model(cards)
+    return await CommonCardInBattle.from_model(cards)
 
 
 async def get_cards_by_user_id(id: int) -> Optional[list[CommonCardInBattle]]:

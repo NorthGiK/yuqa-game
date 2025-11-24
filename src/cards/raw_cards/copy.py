@@ -8,7 +8,8 @@ from src.database.core import AsyncSessionLocal
 async def _create_raw_cards() -> None:
 	for filename in os.listdir("./dir"):
 		with open(f"./dir/{filename}") as card:
-			new_card = MCard(**json.loads(card.read()))
+			asdict = json.loads(card.read())
+			new_card = MCard(**asdict, ability_id=asdict["id"])
 
 		with open(F"./fold/{filename}") as ability:
 			new_ability = MAbilities(**json.loads(ability.read()))

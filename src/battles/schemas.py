@@ -15,3 +15,4 @@ class SBaseChoice:
 class SStandardBattleChoice(SBaseChoice):
     target: int
     selected_card: int
+    ability: bool

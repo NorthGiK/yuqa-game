@@ -1,11 +1,15 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Any, Optional, Union, overload
+from dataclasses import dataclass, field
+from typing import Annotated, Any, Optional, Protocol, Union, overload
+from uuid import UUID, uuid4
+
+from sqlalchemy import select
 
 from src import constants
-from src.battles.exceptions import InvalidDeckSizeError
+from src.battles.exceptions import InvalidDeckSizeError, InvalidTargetTypeError
 from src.battles.schemas import SStandardBattleChoice
-from src.cards.models import Ability, AbilityType, Card, MCard, SubAbility, TargetType
+from src.cards.models import Ability, AbilityType, Card, MAbilities, MCard, SubAbility, TargetType
+from src.database.core import AsyncSessionLocal
 from src.logs import dev_configure, get_logger
 from src.utils.decorators import log_func_call
 
@@ -17,7 +21,12 @@ class Battle(ABC):
     """
     Родительский класс для всех типов боёв
     """
+    id = field(default_factory=lambda: str(uuid4()))
 
+    def __hash__(self) -> int:
+        return hash(self.id)
+
+    @staticmethod
     @abstractmethod
     def create_battle(*args: Any, **kwargs: Any) -> Any:
         pass
@@ -39,7 +48,7 @@ class Battle(ABC):
         pass
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, eq=False)
 class CommonUserInBattle(ABC):
     id: int
     step: Optional[SStandardBattleChoice] = None
@@ -48,14 +57,14 @@ class CommonUserInBattle(ABC):
 
 JUST_DELETE = -1
 
-@dataclass(slots=True)
+@dataclass(slots=True, eq=False)
 class CommonCardInBattle:
     hp: int
     atk: int
     def_: int
     class_: int
     ability: Ability
-    active_abilities: dict[SubAbility, int]
+    active_abilities: dict[SubAbility, int] = field(default_factory=dict) #type:ignore
 
     @log_func_call(log)
     def _apply_stat_change(self, ability_type: AbilityType, value: int) -> None:
@@ -69,11 +78,11 @@ class CommonCardInBattle:
 
         current_value = getattr(self, ability_type.value)
         new_value = current_value + value
-        
+
         # валидация что хп не меньше 0
         if ability_type == AbilityType.hp and new_value < 0:
             new_value = 0
-            
+ 
         setattr(self, ability_type.value, new_value)
 
 
@@ -89,21 +98,21 @@ class CommonCardInBattle:
         match target:
             case TargetType.ownself:
                 return [self]
-            
+
             case TargetType.opponent:
                 return opponent_deck
-            
+
             case TargetType.teammates_only:
                 return [card for card in own_deck if card is not self]
-            
+
             case TargetType.teammates_and_own:
                 return own_deck
-            
+
             case TargetType.all:
                 return own_deck + opponent_deck
 
             case _:
-                raise InvalidTargetTypeError(f"Invalid target type: {target}")
+                raise InvalidTargetTypeError(target=target, module_of_err=__file__)
 
 
     def _apply_ability_to_targets(
@@ -114,8 +123,12 @@ class CommonCardInBattle:
         duration: Optional[int],
     ) -> None:
         """Применение способности к целевым картам"""
-        target_cards = self._get_target_cards(ability.target, own_deck, opponent_deck)
-        
+        target_cards = self._get_target_cards(
+            target=ability.target,
+            own_deck=own_deck,
+            opponent_deck=opponent_deck,
+        )
+
         for card in target_cards:
             card._apply_stat_change(ability.type, ability.value)
             if duration is not None:
@@ -147,7 +160,7 @@ class CommonCardInBattle:
     def process_abilities(self) -> None:
         """Обработка активных способностей с удалением"""
         expired_abilities: list[SubAbility] = []
-        
+
         # Сначала собираем просроченные способности
         for ability, duration in self.active_abilities.items():
             new_duration = duration - 1
@@ -155,7 +168,7 @@ class CommonCardInBattle:
                 expired_abilities.append(ability)
             else:
                 self.active_abilities[ability] = new_duration
-        
+
         # Затем применяем обратный эффект и удаляем
         for ability in expired_abilities:
             self._apply_stat_change(ability.type, -ability.value)
@@ -164,37 +177,60 @@ class CommonCardInBattle:
 
     @log_func_call(log)
     @staticmethod
-    def _get_card(model: Union[MCard, Card]) -> "CommonCardInBattle":
+    async def _get_card(model: Union[MCard, Card]) -> "CommonCardInBattle":
+        if isinstance(model, MCard):
+            async with AsyncSessionLocal() as session:
+                query = select(MAbilities).where(MAbilities.id == model.ability_id)
+                mability: Optional[MAbilities] = (await session.execute(query)).scalar_one_or_none()
+                if mability is None:
+                    raise Exception(f"can't get ability with id `{model.ability_id}`")
+            
+            sub_abilities = [SubAbility(
+                type=AbilityType(abil["type"]),
+                target=TargetType(abil["target"]),
+                value=abil["value"], #type:ignore
+                ) for abil in mability.sub_abilities #type:ignore
+            ]
+            ability = Ability(
+                sub_abilities=sub_abilities, #type:ignore
+                cooldown=mability.cooldown, #type:ignore
+                duration=mability.duration, #type:ignore
+                cost=mability.cost, #type:ignore
+            )
+
+        else:
+            ability = model.ability
+
         return CommonCardInBattle(
             hp=model.hp, #type:ignore
             atk=model.atk, #type:ignore
             def_=model.atk, #type:ignore
             class_=0,
-            ability=..., # TODO:
+            ability=ability,
         )
 
 
     @staticmethod
     @overload
-    def from_model(model: Union[Card, MCard]) -> list["CommonCardInBattle"]:
-        ...
+    async def from_model(model: Union[Card, MCard]) -> list["CommonCardInBattle"]:
+        pass
 
     @staticmethod
     @overload
-    def from_model(model: Union[list[Card], list[MCard]]) -> list["CommonCardInBattle"]:
-        ...
+    async def from_model(model: Union[list[Card], list[MCard]]) -> list["CommonCardInBattle"]:
+        pass
 
     @log_func_call(log)
     @staticmethod
-    def from_model(model: Union[Card, MCard, list[Card], list[MCard]]) -> list["CommonCardInBattle"]:
+    async def from_model(model: Union[Card, MCard, list[Card], list[MCard]]) -> list["CommonCardInBattle"]:
         self = CommonCardInBattle
         if isinstance(model, list):
-            return [self._get_card(card) for card in model]
+            return [await self._get_card(card) for card in model]
 
-        return [self._get_card(model)]
+        return [await self._get_card(model)]
 
 
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True, frozen=True, eq=False)
 class DeckSize:
     """
     неизменяемый класс для обозначения размера колоды в бою
@@ -202,5 +238,5 @@ class DeckSize:
     value: int = 0
 
     def __post_init__(self) -> None:
-        if self.value < 0:
+        if self.value <= 0:
             raise InvalidDeckSizeError()

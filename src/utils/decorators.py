@@ -10,7 +10,7 @@ def log_func_call(logger: logging.Logger, /):
                 args=args,
                 kwargs=kwargs,
             )
-            logger.debug(message)
+            logger.info(message)
             print(message)
 
             return func(*args, **kwargs)
