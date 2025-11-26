@@ -3,10 +3,11 @@ from typing import Annotated, Iterable
 from aiogram.types import (
     InlineKeyboardMarkup,
     InlineKeyboardButton,
+    WebAppInfo,
 )
 
 from src.handlers.telegram.constants import Navigation
-from src.cards.models import Card, MCard, Rarity
+from src.cards.models import MCard, Rarity
 
 
 def _return_to(where: Annotated[str, Navigation]) -> list[InlineKeyboardButton]:

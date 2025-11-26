@@ -36,7 +36,7 @@ from src.battles.logic.common import (
 log = get_logger(__name__)
 dev_configure()
 
-type Battle_T = Union["Battle", "BattleWithDeck", "BattleStandard", "BattleDuo"]
+type Battle_T = Union["BattleWithDeck", "BattleStandard", "BattleDuo"]
 
 @dataclass
 class BattleWithDeck(Battle, ABC):
@@ -55,9 +55,13 @@ class BattleWithDeck(Battle, ABC):
         pass
 
 
+
     @abstractmethod
     @log_func_call(log)
-    def get_user(self, id: int) -> CommonUserInBattle:
+    def get_user(
+        self,
+        id: int,
+    ) -> CommonUserInBattle:
         match id:
             case self.user1.id:
                 return self.user1
@@ -65,6 +69,23 @@ class BattleWithDeck(Battle, ABC):
             case self.user2.id:
                 return self.user2
             
+            case _:
+                raise UserNotFoundInBattle(module_of_err=__file__)
+
+
+    @abstractmethod
+    @log_func_call(log)
+    def get_deck_by_user(self, user: Union[int, CommonUserInBattle]) -> list[CommonCardInBattle]:
+        if isinstance(user, CommonUserInBattle):
+            user = user.id
+        
+        match user:
+            case self.user1:
+                return self.deck1
+
+            case self.user2:
+                return self.deck2
+
             case _:
                 raise UserNotFoundInBattle(module_of_err=__file__)
 
@@ -237,16 +258,11 @@ class BattleStandard(BattleWithDeck):
 
     @override
     def get_user(self, id: int) -> CommonUserInBattle:
-        match id:
-            case self.user1.id:
-                return self.user1
+        return super().get_user(id=id)
 
-            case self.user2.id:
-                return self.user2
-
-            case _:
-                raise UserNotFoundInBattle(module_of_err=__file__)
-
+    @override
+    def get_deck_by_user(self, user: int | CommonUserInBattle) -> list[CommonCardInBattle]:
+        return super().get_deck_by_user(user)
 
     @override
     def validate_round(self) -> None:
@@ -256,18 +272,13 @@ class BattleStandard(BattleWithDeck):
     def check_cards_hp(self) -> Optional[str]:
         return super().check_cards_hp()
 
-
     @override
     def calc_curr_action_scores(self):
         return super().calc_curr_action_scores()
 
-
     @override
-    def calc_step(
-        self,
-    ) -> constants.BattleInProcessOrEnd:
+    def calc_step(self) -> constants.BattleInProcessOrEnd:
         return super().calc_step()
-
 
     @override
     def add_step(

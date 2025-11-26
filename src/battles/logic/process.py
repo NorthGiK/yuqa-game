@@ -1,4 +1,4 @@
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 from sqlalchemy import select
 
@@ -11,6 +11,7 @@ from src.battles.models import BattleType, MBattleQueue
 from src import constants
 from src.battles.schemas import SStandardBattleChoice
 from src.database.core import AsyncSessionLocal
+from src.handlers.telegram.battle import init_battle_for_users
 from src.logs import dev_configure, get_logger
 from src.users.models import MUser
 from src.utils.decorators import log_func_call
@@ -36,26 +37,43 @@ async def init_battle(
     user_id: int, 
     queue: MBattleQueue, 
 	type: Annotated[str, BattleType],
-) -> Optional[str]:
-
+) -> Optional[Literal[True]]:
 	battle_id: Optional[str] = await BattlesManagement.create_battle(
 		usr1=user_id,
 		usr2=queue.user_id, #type:ignore
 		type=type,
 	)
+	if battle_id is None:
+		raise Exception("Can't create a battle error!") # TODO:CantCreateBattleError()
 
 	async with AsyncSessionLocal() as db:
 		await db.delete(queue)
 		await db.commit()
 
-	return battle_id
+	await init_battle_for_users(users=(user_id, queue.user_id), type=type, battle_id=battle_id) #type:ignore
+	
+	return True
 
 
 @log_func_call(log)
 async def start_battle(
   	user_id: int,
 	type: Annotated[str, Battle_T],
-) -> Optional[str]:
+) -> Optional[bool]:
+	"""
+	старт боя: создание очереди на бой, если не нашлось совпаденией,
+	иначе создаёт бой в бд и обработчике боев (`BattlesManagement`)
+
+	если создался бой, то через rabbit вызовется бой у пользователся
+
+	:param user_id: телеграм id пользователя
+	:type user_id: int
+	:param type: тип боя из `BattleType`
+	:type type: Annotated[str, Battle_T]
+
+	:return: возвращает `True` если бой начался, `False` если в очереди, `None` если пользователь не найден
+	:rtype: bool | None
+	"""
 	user_query = select(MUser).where(MUser.id == user_id)
 	async with AsyncSessionLocal() as session:
 		user = (await session.execute(user_query)).scalar_one_or_none()

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Annotated, Any, Optional, Protocol, Union, overload
-from uuid import UUID, uuid4
+from typing import Any, Optional, Union, overload
+from uuid import uuid4
 
 from sqlalchemy import select
 
@@ -59,6 +59,7 @@ JUST_DELETE = -1
 
 @dataclass(slots=True, eq=False)
 class CommonCardInBattle:
+    name: str
     hp: int
     atk: int
     def_: int
@@ -202,6 +203,7 @@ class CommonCardInBattle:
             ability = model.ability
 
         return CommonCardInBattle(
+            name=model.name, #type:ignore
             hp=model.hp, #type:ignore
             atk=model.atk, #type:ignore
             def_=model.atk, #type:ignore
