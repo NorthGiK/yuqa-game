@@ -9,7 +9,7 @@ from src.database.BaseModel import Base
 
 
 engine = create_async_engine(
-    config.DB_URL,
+    config.db.DB_URL,
     echo=True,
 )
 

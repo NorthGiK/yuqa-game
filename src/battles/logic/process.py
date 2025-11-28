@@ -1,4 +1,5 @@
-from typing import Annotated, Literal, Optional
+from datetime import timedelta
+from typing import Annotated, Optional
 
 from sqlalchemy import select
 
@@ -11,10 +12,12 @@ from src.battles.models import BattleType, MBattleQueue
 from src import constants
 from src.battles.schemas import SStandardBattleChoice
 from src.database.core import AsyncSessionLocal
-from src.handlers.telegram.battle import init_battle_for_users
+from src.handlers.rabbit.constants import INIT_BATTLE_QUEUE
 from src.logs import dev_configure, get_logger
 from src.users.models import MUser
 from src.utils.decorators import log_func_call
+from src.handlers.rabbit.core import rabbit
+from src.utils.redis_cache import redis
 
 
 log = get_logger(__name__)
@@ -37,22 +40,23 @@ async def init_battle(
     user_id: int, 
     queue: MBattleQueue, 
 	type: Annotated[str, BattleType],
-) -> Optional[Literal[True]]:
+) -> None:
 	battle_id: Optional[str] = await BattlesManagement.create_battle(
 		usr1=user_id,
 		usr2=queue.user_id, #type:ignore
 		type=type,
 	)
 	if battle_id is None:
-		raise Exception("Can't create a battle error!") # TODO:CantCreateBattleError()
+		raise Exception("Can't create a battle error!")
 
 	async with AsyncSessionLocal() as db:
 		await db.delete(queue)
 		await db.commit()
 
-	await init_battle_for_users(users=(user_id, queue.user_id), type=type, battle_id=battle_id) #type:ignore
-	
-	return True
+	for id in (user_id, queue.user_id):
+		await redis.setex(f"battle:{id}", timedelta(minutes=5), battle_id)
+
+	await rabbit.publish(queue=INIT_BATTLE_QUEUE, message=[user_id, queue.user_id]) #type:ignore
 
 
 @log_func_call(log)

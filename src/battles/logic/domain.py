@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import (
     Annotated,
     Any,
+    Callable,
     Optional,
     Union,
     override,
@@ -14,6 +15,7 @@ from typing import (
 from uuid import UUID, uuid4
 
 from src import constants
+from src.constants import BattleInProcessOrEnd
 from src.battles.exceptions import (
     SelectedCardWithZeroHP,
     TargetCardWithZeroHP,
@@ -58,10 +60,7 @@ class BattleWithDeck(Battle, ABC):
 
     @abstractmethod
     @log_func_call(log)
-    def get_user(
-        self,
-        id: int,
-    ) -> CommonUserInBattle:
+    def get_user(self, id: int) -> CommonUserInBattle:
         match id:
             case self.user1.id:
                 return self.user1
@@ -71,6 +70,12 @@ class BattleWithDeck(Battle, ABC):
             
             case _:
                 raise UserNotFoundInBattle(module_of_err=__file__)
+    
+
+    @abstractmethod
+    @log_func_call(log)
+    def get_users(self) -> tuple[CommonUserInBattle, CommonUserInBattle]:
+        return self.user1, self.user2
 
 
     @abstractmethod
@@ -189,11 +194,12 @@ class BattleWithDeck(Battle, ABC):
     def add_step(
         self,
         choice: SStandardBattleChoice,
-    ) -> constants.BattleInProcessOrEnd:
+    ) -> BattleInProcessOrEnd:
         user = self.get_user(choice.user_id)
         user.step = choice
-
-        return self.calc_step()
+        status: BattleInProcessOrEnd = self.calc_step()
+        
+        return status
 
 
 @dataclass(slots=True)
@@ -216,6 +222,9 @@ class BattleDuo(BattleWithDeck):
         )
 
 
+    def get_users(self) -> tuple[CommonUserInBattle, CommonUserInBattle]:
+        return super().get_users()
+
     def check_cards_hp(self) -> Optional[str]:
         return super().check_cards_hp()
 
@@ -228,13 +237,11 @@ class BattleDuo(BattleWithDeck):
     def calc_step(self) -> constants.BattleInProcessOrEnd:
         return super().calc_step()
 
-
     def add_step(
         self,
         choice: SStandardBattleChoice,
-    ) -> constants.BattleInProcessOrEnd:
+    ) -> BattleInProcessOrEnd:
         return super().add_step(choice)
-
 
 @dataclass
 class BattleStandard(BattleWithDeck):
@@ -255,6 +262,10 @@ class BattleStandard(BattleWithDeck):
             deck_size=DeckSize(len(deck1)),
         )
 
+
+    @override
+    def get_users(self) -> tuple[CommonUserInBattle, CommonUserInBattle]:
+        return super().get_users()
 
     @override
     def get_user(self, id: int) -> CommonUserInBattle:
@@ -325,7 +336,7 @@ class _BattlesManagement(Singletone):
 
 
     @log_func_call(log)
-    def get_battle(self, id: str) -> Optional[Battle_T]:
+    def get_battle(self, id: str | Any) -> Optional[Battle_T]:
         return self.battles.get(id, None)
 
 

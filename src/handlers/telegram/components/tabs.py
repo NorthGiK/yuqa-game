@@ -1,20 +1,25 @@
 from typing import Annotated, Iterable
 
 from aiogram.types import (
+    ReplyKeyboardMarkup,
+    KeyboardButton,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
-    WebAppInfo,
 )
 
 from src.handlers.telegram.constants import Navigation
 from src.cards.models import MCard, Rarity
 
 
-def _return_to(where: Annotated[str, Navigation]) -> list[InlineKeyboardButton]:
-    return [InlineKeyboardButton(
-        text="Назад",
-        callback_data=where, #type:ignore
-    )]
+def _return_to(where: Annotated[str, Navigation], inline: bool = True) -> list[InlineKeyboardButton] | list[KeyboardButton]:
+    if inline:
+        return [InlineKeyboardButton(
+            text="Назад",
+            callback_data=where, #type:ignore
+        )]
+    return [
+        KeyboardButton(text="Назад ↵")
+    ]
 
 main = InlineKeyboardMarkup(inline_keyboard=[
     [
@@ -58,10 +63,10 @@ def in_inventory_create(cards: Iterable[MCard]) -> InlineKeyboardMarkup:
             _return_to(Navigation.inventory),
         ])
 
-battle = InlineKeyboardMarkup(inline_keyboard=[
+battle = ReplyKeyboardMarkup(keyboard=[
     [
-        InlineKeyboardButton(text="Стандарт", callback_data=Navigation.in_battle.standard),
-        InlineKeyboardButton(text="Дуо", callback_data=Navigation.in_battle.duo),
+        KeyboardButton(text="Стандарт"), #, callback_data=Navigation.in_battle.standard),
+        KeyboardButton(text="Дуо"), #, callback_data=Navigation.in_battle.duo),
     ],
-    _return_to(Navigation.main),
-])
+    _return_to("", False),
+], resize_keyboard=True)

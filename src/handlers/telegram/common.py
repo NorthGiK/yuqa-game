@@ -3,6 +3,7 @@ from typing import Optional, Union
 from aiogram import F, Router
 from aiogram.filters import (
     CommandStart,
+    Command,
 )
 from aiogram.types import (
     Message,
@@ -13,11 +14,16 @@ from src.handlers.telegram import constants
 from src.handlers.telegram.components import tabs
 from src.cards.models import MCard, Rarity
 from src.cards.crud import get_cards_by_rarity
+from src.logs import dev_configure, get_logger
 from src.users.crud import check_user, create_user, get_user
-from src.utils.redis_broker import redis
+from src.utils.decorators import log_func_call
+from src.utils.redis_cache import redis
 
 
 router = Router()
+
+log = get_logger(__name__)
+dev_configure()
 
 async def _start(msg: Union[Message, CallbackQuery]):
     user = msg.from_user
@@ -52,10 +58,14 @@ async def start_handler(msg: Message):
 async def main_handler(clbk: CallbackQuery):
     await _start(clbk)
 
+@router.message(F.text == "Назад ↵")
+async def back_to_main_handler(msg: Message) -> None:
+    await _start(msg)
+
 
 @router.callback_query(F.data == constants.Navigation.inventory)
 async def profile_handler(clbk: CallbackQuery):
-    await clbk.answer()
+    await clbk.answer("")
     await clbk.message.answer( #type:ignore
         f"Инвентарь {clbk.from_user.username}\n"
         ,
@@ -91,7 +101,7 @@ async def legendary_cards_handler(clbk: CallbackQuery) -> None:
 
 @router.callback_query(F.data == constants.Navigation.profile)
 async def inventory_handler(clbk: CallbackQuery):
-    await clbk.answer()
+    await clbk.answer("")
 
     id = clbk.from_user.id
     user = await get_user(id)
@@ -111,7 +121,7 @@ async def inventory_handler(clbk: CallbackQuery):
 
 @router.callback_query(F.data == constants.Navigation.battle)
 async def battle_handler(clbk: CallbackQuery):
-    await clbk.answer()
+    await clbk.answer("ok")
 
     if clbk.message is None:
         return

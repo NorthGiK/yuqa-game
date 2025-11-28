@@ -55,8 +55,6 @@ class CommonUserInBattle(ABC):
     action_score: int = 2
 
 
-JUST_DELETE = -1
-
 @dataclass(slots=True, eq=False)
 class CommonCardInBattle:
     name: str

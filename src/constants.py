@@ -13,7 +13,7 @@ class BattleState:
       end = "END_OF_ROUND"
 
 
-BattleInProcessOrEnd = Literal[
+type BattleInProcessOrEnd = Literal[
         BattleState.local.wait_opponent,
         BattleState.local.end,
         BattleState.global_.end,
