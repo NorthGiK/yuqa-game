@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from typing import (
     Annotated,
     Any,
-    Callable,
     Optional,
     Union,
     override,
@@ -57,7 +56,6 @@ class BattleWithDeck(Battle, ABC):
         pass
 
 
-
     @abstractmethod
     @log_func_call(log)
     def get_user(self, id: int) -> CommonUserInBattle:
@@ -83,30 +81,22 @@ class BattleWithDeck(Battle, ABC):
     def get_deck_by_user(self, user: Union[int, CommonUserInBattle]) -> list[CommonCardInBattle]:
         if isinstance(user, CommonUserInBattle):
             user = user.id
-        
-        match user:
-            case self.user1:
-                return self.deck1
 
-            case self.user2:
-                return self.deck2
-
-            case _:
-                raise UserNotFoundInBattle(module_of_err=__file__)
+        return self.deck1 if user == self.user1.id else self.deck2
 
 
     @abstractmethod
     @log_func_call(log)
-    def check_cards_hp(self) -> Optional[str]:
+    def check_cards_hp(self) -> Optional[int]:
         not_deck1 = not all(self.deck1)
         not_deck2 = not all(self.deck2)
 
         if not_deck1 and not_deck2:
-            return "NIL"
+            return 0
         elif not_deck1:
-            return "USER1"
+            return self.user1.id
         elif not_deck2:
-            return "USER2"
+            return self.user2.id
 
         return None
 
@@ -179,7 +169,7 @@ class BattleWithDeck(Battle, ABC):
         self.deck1[self.user2.step.target].hp = max(0, hp1 - user2_total_dmg)
         self.deck2[self.user1.step.target].hp = max(0, hp2 - user1_total_dmg)
 
-        if not self.check_cards_hp():
+        if self.check_cards_hp() is not None:
             return constants.BattleState.global_.end
 
         self.calc_curr_action_scores()
@@ -225,7 +215,7 @@ class BattleDuo(BattleWithDeck):
     def get_users(self) -> tuple[CommonUserInBattle, CommonUserInBattle]:
         return super().get_users()
 
-    def check_cards_hp(self) -> Optional[str]:
+    def check_cards_hp(self) -> Optional[int]:
         return super().check_cards_hp()
 
     def calc_curr_action_scores(self) -> None:
@@ -280,7 +270,7 @@ class BattleStandard(BattleWithDeck):
         return super().validate_round()
 
     @override
-    def check_cards_hp(self) -> Optional[str]:
+    def check_cards_hp(self) -> Optional[int]:
         return super().check_cards_hp()
 
     @override

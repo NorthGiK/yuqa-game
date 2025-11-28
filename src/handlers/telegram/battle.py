@@ -1,4 +1,3 @@
-from types import NoneType
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
@@ -111,31 +110,26 @@ async def confirm_battle(users: Collection[int]) -> None:
 async def _cmd_start(
         clbk: Message | CallbackQuery,
         state: FSMContext,
-        *,
-        params: dict[str, Any] | None = None,
+        exist_choice: Optional[BattleChoiceTG] = None,
     ) -> None:
     """Инициализация игры"""
     user_id: int = clbk.from_user.id
 
     # Инициализация данных пользователя
-    user_data[user_id] = BattleChoiceTG(**({} if not params else params))
-    log.info("create new battle choice with id {id}".format(id=user_id))
+    user_data[user_id] = exist_choice or BattleChoiceTG()
 
     await state.set_state(GameStates.waiting_for_action)
-    log.info("state is seted")
 
     await show_action_keyboard(clbk, user_id)
-    log.info("showing action keyboard")
 
 
 @router.callback_query(F.data == "init_battle_in_tg")
 async def cmd_start_handler(
     clbk: CallbackQuery | Message,
     state: FSMContext,
-    /,
     params: dict[str, Any] | None = None
 ) -> None:
-    return await _cmd_start(clbk, state, params=params)
+    return await _cmd_start(clbk, state)
 
 
 async def show_action_keyboard(clbk: CallbackQuery | Message, user_id: int):
@@ -191,6 +185,7 @@ async def show_action_keyboard(clbk: CallbackQuery | Message, user_id: int):
 
     user_data[user_id].message_id = msg.message_id
 
+
 def generate_status_text(user_id: int) -> str:
     """Генерация текста статуса"""
     data = user_data[user_id]
@@ -204,62 +199,6 @@ def generate_status_text(user_id: int) -> str:
         f"🌀 Способность: {'ИСПОЛЬЗОВАНА' if data.ability_used else 'доступна'}\n"
         f"\nВыберите действие:"
     )
-
-
-@router.callback_query(F.data.startswith("action_"), GameStates.waiting_for_action)
-async def process_action(callback: CallbackQuery, state: FSMContext) -> None:
-    """Обработка действий игрока"""
-    user_id: int = callback.from_user.id
-    data: BattleChoiceTG = user_data[user_id]
-    action: Optional[str] = callback.data
-    if action is None:
-        log.warning("can't get action from {file}".format(file=__file__))
-        return None
-
-    # Проверяем остались ли ходы (кроме смены персонажа)
-    if data.action_score <= 0 and action != "action_change_character":
-        await callback.answer("Ходы закончились! Можешь смените персонажа", show_alert=True)
-        await end_turn(callback.message, user_id)
-        return
-
-    # Обработка разных действий
-    if action == "action_attack":
-        data.attack_count += 1
-        data.action_score -= 1
-        await callback.answer("🗡 Атака добавлена!")
-
-    elif action == "action_block":
-        data.block_count += 1
-        data.action_score -= 1
-        await callback.answer("🛡 Блок добавлен!")
-
-    elif action == "action_bonus":
-        data.action_score += 1
-        data.action_score -= 1
-        await callback.answer("⭐ Бонус добавлен!")
-
-    elif action == "action_ability":
-        if data.ability_used:
-            await callback.answer("Способность уже использована!", show_alert=True)
-            return
-
-        data.ability_used = True
-        data.action_score -= 5
-        await callback.answer("🌀 Способность активирована!")
-
-    elif action == "action_change_character":
-        current_card = user_data[user_id].current_character
-        await show_character_selection(callback.message, user_id, current_card)
-        await callback.answer()
-        return
-
-    elif action == "action_end_turn":
-        await callback.answer()
-        await end_turn(callback.message, user_id)
-        return
-
-    # Обновляем клавиатуру
-    await show_action_keyboard(callback, user_id)
 
 
 async def show_character_selection(message: Message, user_id: int, current_character: int) -> None:
@@ -289,6 +228,7 @@ async def show_character_selection(message: Message, user_id: int, current_chara
         reply_markup=builder.as_markup()
     )
 
+
 @router.callback_query(F.data.startswith("character_"))
 async def process_character_selection(callback: CallbackQuery, state: FSMContext):
     """Обработка выбора персонажа"""
@@ -308,15 +248,115 @@ async def process_character_selection(callback: CallbackQuery, state: FSMContext
     await show_action_keyboard(callback.message, user_id)
 
 
-async def end_turn(message: Message, user_id: int):
+
+@router.callback_query(F.data.startswith("action_"), GameStates.waiting_for_action)
+async def process_action(callback: CallbackQuery, state: FSMContext) -> None:
+    """Обработка действий игрока"""
+    user_id: int = callback.from_user.id
+    
+    if user_id not in user_data:
+        await callback.answer("Ошибка: данные не найдены", show_alert=True)
+        return
+    
+    data: BattleChoiceTG = user_data[user_id]
+    action: str = callback.data
+    
+    # Проверяем остались ли ходы (кроме смены персонажа и завершения хода)
+    if data.action_score <= 0 and action not in ["action_change_character", "action_end_turn"]:
+        await callback.answer("Ходы закончились! Завершите ход или смените персонажа", show_alert=True)
+        return
+
+    action_performed = True
+    
+    # Обработка разных действий
+    if action == "action_attack":
+        if data.action_score > 0:
+            data.attack_count += 1
+            data.action_score -= 1
+            await callback.answer("🗡 Атака добавлена!")
+        else:
+            await callback.answer("Недостаточно ходов для атаки!", show_alert=True)
+            return
+
+    elif action == "action_block":
+        if data.action_score > 0:
+            data.block_count += 1
+            data.action_score -= 1
+            await callback.answer("🛡 Блок добавлен!")
+        else:
+            await callback.answer("Недостаточно ходов для блока!", show_alert=True)
+            return
+
+    elif action == "action_bonus":
+        if data.action_score > 0:
+            data.bonus_count += 1
+            data.action_score -= 1
+            await callback.answer("⭐ Бонус добавлен!")
+        else:
+            await callback.answer("Недостаточно ходов для бонуса!", show_alert=True)
+            return
+
+    elif action == "action_ability":
+        if data.ability_used:
+            await callback.answer("Способность уже использована!", show_alert=True)
+            return
+        if data.action_score >= 5:  # Проверяем достаточно ли ходов для способности
+            data.ability_used = True
+            data.action_score -= 5
+            await callback.answer("🌀 Способность активирована!")
+        else:
+            await callback.answer("Недостаточно ходов для способности! Нужно 5 ходов.", show_alert=True)
+            return
+
+    elif action == "action_change_character":
+        current_card = data.current_character
+        await show_character_selection(callback.message, user_id, current_card)
+        await callback.answer()
+        return
+
+    elif action == "action_end_turn":
+        await callback.answer()
+        await end_turn(callback.message, state, user_id)
+        return
+
+    else:
+        action_performed = False
+
+    # Обновляем клавиатуру только если было выполнено действие
+    if action_performed:
+        await show_action_keyboard(callback, user_id)
+
+
+async def end_turn(message: Message, state: FSMContext, user_id: int):
     """Завершение хода"""
+    if user_id not in user_data:
+        return
+        
     data: BattleChoiceTG = user_data[user_id]
     battle_id: Optional[bytes] = await redis.get(f"battle:{user_id}")
-    battle = BattlesManagement.get_battle((bid := battle_id) if isinstance(bid, str) else bid.decode())
-    status = battle.add_step(SStandardBattleChoice(**data.asdict))
+    
+    if not battle_id:
+        await message.answer("Ошибка: бой не найден")
+        return
+        
+    battle = BattlesManagement.get_battle(battle_id.decode())
+    if not battle:
+        await message.answer("Ошибка: данные боя не найдены")
+        return
 
-    if (status == BattleState.global_.end) or (status == BattleState.local.end):
-        await start_new_turn(message, battle)
+    # Передаем ход в логику боя
+
+    battle_choice = SStandardBattleChoice(
+        user_id,
+        battle.id,
+        data.attack_count,
+        data.block_count,
+        data.bonus_count,
+        data.target_character,
+        data.current_character,
+        data.ability_used,
+    )
+    battle_status = battle.add_step(battle_choice)
 
     summary_text = (
         f"🎯 **Ход завершён!**\n"
@@ -325,9 +365,10 @@ async def end_turn(message: Message, user_id: int):
         f"🛡 Блоков: {data.block_count}\n" 
         f"⭐ Бонусов: {data.bonus_count}\n"
         f"🌀 Способность: {'ИСПОЛЬЗОВАНА' if data.ability_used else 'не использована'}\n"
-        f"👤 Персонаж: #{data.current_character}"
+        f"👤 Персонаж: #{data.current_character} - {data.current_character}"
     )
 
+    # Отправляем итоги хода
     await message.bot.edit_message_text(
         chat_id=message.chat.id,
         message_id=data.message_id,
@@ -335,30 +376,79 @@ async def end_turn(message: Message, user_id: int):
         parse_mode="markdown",
     )
 
-    # Сброс данных для следующего хода (или можно сохранить историю)
+    # Проверяем статус боя
+    if battle_status == BattleState.global_.end:
+        # Бой завершен
+        await handle_battle_end(message, battle, user_id)
+    if battle_status == BattleState.local.end:
+        # Начинаем новый раунд
+        await start_new_turn(message, state, user_id, battle, battle_status)
+
+
+async def start_new_turn(message: Message, state: FSMContext, user_id: int, battle: Battle_T, status: BattleInProcessOrEnd):
+    """Начало нового хода"""
+    bot = message.bot
+
+    # Получаем актуальные данные о колоде
+    deck = battle.get_deck_by_user(user_id)
+
+    # Формируем информацию о колоде
+    deck_info = "🃏 **Состояние колоды:**\n"
+    for i, card in enumerate(deck, 1):
+        deck_info += f"{i}. {card.name} | {card.hp}♥️ {card.atk}⚔️ {card.def_}🛡️\n"
+
+    # Отправляем обновленную информацию о колоде
+    await bot.send_message(user_id, deck_info, parse_mode="markdown")
+
+    # Сбрасываем данные для нового хода
     reset_user_turn(user_id)
 
+    # Начинаем новый ход
+    await _cmd_start(message, state, user_data[user_id])
 
-async def start_new_turn(msg: Message, state: FSMContext, battle: Battle_T):
+
+async def handle_battle_end(message: Message, battle: Battle_T, user_id: int):
+    """Обработка завершения боя"""
+    # Определяем результат боя
+    result = battle.check_cards_hp()
     users = battle.get_users()
-    bot = config.tg_workflow.bot
-
-    for user in users:
-        deck_info = "\n"
-        deck = battle.get_deck_by_user(user)
-        deck_info.join(f"{i}. {card.name} | {card.hp}♥️ {card.atk}⚔️ {card.def_}🛡️ |" for i, card in enumerate(deck, 1))
-
-        await bot.send_message(user.id, deck_info)
-        await cmd_start(msg, state, params={})
 
 
-def reset_user_turn(user_id: int):
-    """Сброс данных хода пользователя"""
-    user_data[user_id] = BattleChoiceTG(
-        action_score = 3,
-        attack_count = 0,
-        block_count = 0,
-        bonus_count = 0,
-        ability_used = False,
-        # current_character сохраняется
+    if len(users) == 2:
+        if result == user_id:
+            text = "🎉 **Победа!** Вы выиграли бой!"
+        elif result == 0:  # Ничья
+            text = "🤝 **Ничья!**"
+        else:
+            text = "💔 **Поражение!** Вы проиграли бой."
+    else:
+        text = "⚔️ **Бой завершен!**"
+
+    # Отправляем результат
+    await message.bot.send_message(
+        chat_id=message.chat.id,
+        text=text,
+        parse_mode="markdown"
     )
+
+    # Очищаем данные боя
+    if user_id in user_data:
+        del user_data[user_id]
+    await redis.delete(f"battle:{user_id}")
+
+
+def reset_user_turn(user_id: int, action_score: int = 0):
+    """Сброс данных хода пользователя"""
+    if user_id in user_data:
+        # Сохраняем текущего персонажа, сбрасываем остальное
+        current_char = user_data[user_id].current_character
+        current_target = user_data[user_id].target_character
+        user_data[user_id] = BattleChoiceTG(
+            current_character=current_char,
+            target_character=current_target,
+            action_score=action_score,
+            attack_count=0,
+            block_count=0,
+            bonus_count=0,
+            ability_used=False
+        )
