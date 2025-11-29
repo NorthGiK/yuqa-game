@@ -10,8 +10,9 @@ from aiogram.types import Message
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from src.battles.logic.common import CommonCardInBattle, CommonUserInBattle
 from src.battles.logic.domain import Battle_T, BattlesManagement
-from src.core.settings import config
+from src.core.settings import Config, config
 from src.battles.logic.process import start_battle
 from src.battles.models import BattleType
 from src.battles.schemas import SStandardBattleChoice
@@ -20,7 +21,12 @@ from src.database.core import AsyncSessionLocal
 from src.handlers.rabbit.constants import INIT_BATTLE_QUEUE
 from src.handlers.rabbit.core import rabbit
 from src.utils.redis_cache import redis
-from src.handlers.telegram.constants import BattleChoiceTG, GameStates, user_data
+from src.handlers.telegram.constants import (
+    USER_BATTLE_REDIS,
+    BattleChoiceTG,
+    GameStates,
+    user_data,
+)
 from src.logs import get_logger, dev_configure
 from src.users.models import MUser
 
@@ -108,13 +114,12 @@ async def confirm_battle(users: Collection[int]) -> None:
 
 
 async def _cmd_start(
-        clbk: Message | CallbackQuery,
+        clbk: Message | CallbackQuery | None,
+        user_id: int,
         state: FSMContext,
         exist_choice: Optional[BattleChoiceTG] = None,
     ) -> None:
     """Инициализация игры"""
-    user_id: int = clbk.from_user.id
-
     # Инициализация данных пользователя
     user_data[user_id] = exist_choice or BattleChoiceTG()
 
@@ -129,10 +134,10 @@ async def cmd_start_handler(
     state: FSMContext,
     params: dict[str, Any] | None = None
 ) -> None:
-    return await _cmd_start(clbk, state)
+    return await _cmd_start(clbk, clbk.from_user.id, state)
 
 
-async def show_action_keyboard(clbk: CallbackQuery | Message, user_id: int):
+async def show_action_keyboard(clbk: CallbackQuery | Message | None, user_id: int):
     """Показать клавиатуру с действиями"""
     if isinstance(clbk, CallbackQuery):
         await clbk.answer()
@@ -151,6 +156,7 @@ async def show_action_keyboard(clbk: CallbackQuery | Message, user_id: int):
 
     # Кнопка смены персонажа (всегда активна)
     builder.button(text="🔀 Сменить персонажа", callback_data="action_change_character")
+    builder.button(text="㊗️ Сменить цель", callback_data="action_change_target")
 
     # Завершение хода (когда ходы закончились)
     if data.action_score <= 0:
@@ -164,8 +170,8 @@ async def show_action_keyboard(clbk: CallbackQuery | Message, user_id: int):
     # Отправляем или обновляем сообщение
     if data.message_id is not None:
         try:
-            await clbk.bot.edit_message_text(
-                chat_id=clbk.from_user.id,
+            await Config().tg_workflow.bot.edit_message_text(
+                chat_id=user_id,
                 message_id=data.message_id,
                 text=status_text,
                 reply_markup=builder.as_markup(),
@@ -180,8 +186,16 @@ async def show_action_keyboard(clbk: CallbackQuery | Message, user_id: int):
             raise Exception("message is None!! fuck blyat!")
         msg = await clbk.message.answer(status_text, reply_markup=builder.as_markup())
 
-    else:
+    elif isinstance(clbk, Message):
         msg = await clbk.answer(status_text, reply_markup=builder.as_markup())
+    
+    else:
+        bot = Config().tg_workflow.bot
+        msg = await bot.send_message(
+            user_id,
+            status_text,
+            reply_markup=builder.as_markup(),
+        )
 
     user_data[user_id].message_id = msg.message_id
 
@@ -210,7 +224,39 @@ async def show_character_selection(message: Message, user_id: int, current_chara
         return
 
     # Кнопки выбора персонажа
-    for i, card in enumerate(battle.get_deck_by_user(user_id), 1):
+    deck: list[CommonCardInBattle] = battle.get_deck_by_user(user_id)
+    for i, card in enumerate(deck, 1):
+        if i == current_character:
+            continue
+
+        builder.button(text=f"Персонаж #{i} {card.name}", callback_data=f"character_{i}")
+
+    # Кнопка назад
+    builder.button(text="🔙 Назад", callback_data="character_back")
+    builder.adjust(2, 2, 1, 1)
+
+    await message.bot.edit_message_text(
+        chat_id=message.chat.id,
+        message_id=user_data[user_id].message_id,
+        text=f"👥 **Выбор персонажа**\nВыберите персонажа (1-{len(deck) + 1}):",
+        parse_mode="markdown",
+        reply_markup=builder.as_markup()
+    )
+
+
+async def show_target_selection(message: Message, user_id: int, current_character: int) -> None:
+    """Показать выбор персонажа"""
+    builder = InlineKeyboardBuilder()
+    
+    battle_id = await redis.get(f"battle:{user_id}")
+    battle = BattlesManagement.get_battle(battle_id.decode())
+    if battle is None:
+        return
+    
+    opponent_id = next(user.id for user in battle.get_users() if user.id != user_id)
+
+    # Кнопки выбора персонажа
+    for i, card in enumerate(battle.get_deck_by_user(opponent_id), 1):
         if i == current_character:
             continue
 
@@ -227,7 +273,6 @@ async def show_character_selection(message: Message, user_id: int, current_chara
         parse_mode="markdown",
         reply_markup=builder.as_markup()
     )
-
 
 @router.callback_query(F.data.startswith("character_"))
 async def process_character_selection(callback: CallbackQuery, state: FSMContext):
@@ -247,6 +292,24 @@ async def process_character_selection(callback: CallbackQuery, state: FSMContext
     await callback.answer(f"Персонаж #{character_num} выбран!")
     await show_action_keyboard(callback.message, user_id)
 
+
+@router.callback_query(F.data.startswith("target_"))
+async def process_target_selection(callback: CallbackQuery, state: FSMContext):
+    """Обработка выбора персонажа"""
+    user_id = callback.from_user.id
+
+    if callback.data == "target_back":
+        # Возврат к основному меню
+        await show_action_keyboard(callback, user_id)
+        await callback.answer()
+        return
+
+    # Извлекаем номер персонажа
+    target_num = int(callback.data.split("_")[-1])
+    user_data[user_id].target_character = target_num
+
+    await callback.answer(f"Цель #{target_num} выбран!")
+    await show_action_keyboard(callback.message, user_id)
 
 
 @router.callback_query(F.data.startswith("action_"), GameStates.waiting_for_action)
@@ -282,9 +345,9 @@ async def process_action(callback: CallbackQuery, state: FSMContext) -> None:
                     attr)
 
             setattr(data, attr, 1 + prev_value)
-            await callback.answer(positive_message, show_alert=True)
+            await callback.answer(positive_message)
         else:
-            await callback.answer(else_message, show_alert=True)
+            await callback.answer(else_message)
             return    
 
 
@@ -325,6 +388,12 @@ async def process_action(callback: CallbackQuery, state: FSMContext) -> None:
     elif action == "action_change_character":
         current_card = data.current_character
         await show_character_selection(callback.message, user_id, current_card)
+        await callback.answer()
+        return
+
+    elif action == "action_change_target":
+        current_target = data.target_character
+        await show_target_selection(callback.message, user_id, current_target)
         await callback.answer()
         return
 
@@ -395,15 +464,16 @@ async def end_turn(message: Message, state: FSMContext, user_id: int):
     # Проверяем статус боя
     if battle_status == BattleState.global_.end:
         # Бой завершен
-        await handle_battle_end(message, battle, user_id)
+        await handle_battle_end(message, battle, user_id, state)
     if battle_status == BattleState.local.end:
         # Начинаем новый раунд
-        await start_new_turn(message, state, user_id, battle, battle_status)
+        for user in battle.get_users():
+            await start_new_turn(state, user.id, battle)
 
 
-async def start_new_turn(message: Message, state: FSMContext, user_id: int, battle: Battle_T, status: BattleInProcessOrEnd):
+async def start_new_turn(state: FSMContext, user_id: int, battle: Battle_T):
     """Начало нового хода"""
-    bot = message.bot
+    bot = Config().tg_workflow.bot
 
     # Получаем актуальные данные о колоде
     deck = battle.get_deck_by_user(user_id)
@@ -416,11 +486,15 @@ async def start_new_turn(message: Message, state: FSMContext, user_id: int, batt
     # Отправляем обновленную информацию о колоде
     await bot.send_message(user_id, deck_info, parse_mode="markdown")
 
+    # получение кол-ва очков действия
+    user = battle.get_user(user_id)
+    action_score = user.action_score
+
     # Сбрасываем данные для нового хода
-    reset_user_turn(user_id)
+    await reset_user_turn(user_id, action_score)
 
     # Начинаем новый ход
-    await _cmd_start(message, state, user_data[user_id])
+    await _cmd_start(None, user_id, state, user_data[user_id])
 
 
 async def handle_battle_end(
@@ -464,14 +538,38 @@ async def handle_battle_end(
     await redis.delete(f"battle:{user_id}")
 
 
-def reset_user_turn(user_id: int, action_score: int = 0):
+async def reset_user_turn(user_id: int, action_score: int = 0):
     """Сброс данных хода пользователя"""
-        # Сохраняем текущего персонажа, сбрасываем остальное
+    # Сохраняем текущего персонажа, цель, id последнего сообщения и обновляем очки действия, сбрасываем остальное
     current_char = user_data[user_id].current_character
     current_target = user_data[user_id].target_character
+
+    battle_id: Optional[bytes] = await redis.get(USER_BATTLE_REDIS.format(id=user_id))
+    if not battle_id:
+        log.error("can't get battle id in %s from async def reset_user_turn", __file__)
+        return None
+    battle = BattlesManagement.get_battle(battle_id.decode())
+    if battle is None:return
+
+    own_deck: list[CommonCardInBattle] = battle.get_deck_by_user(user_id)
+
+    opponent_id: int = battle.get_opponent(user_id).id
+    opponent_deck: list[CommonCardInBattle] = battle.get_deck_by_user(opponent_id)
+
+    def change_index(deck: list[CommonCardInBattle], current_index: int) -> int:
+        for i, card in enumerate(deck):
+            if card.hp > 0:
+                current_index = i
+                break
+
+        return current_index
+
+
+    current_char = change_index(own_deck, current_char)
+    current_target = change_index(opponent_deck, current_target)
     user_data[user_id] = BattleChoiceTG(
-        current_character=current_char,
-        target_character=current_target,
+        current_character=current_char + 1,
+        target_character=current_target + 1,
         action_score=action_score,
         attack_count=0,
         block_count=0,

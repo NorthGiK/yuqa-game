@@ -211,6 +211,10 @@ class BattleDuo(BattleWithDeck):
             deck_size=DeckSize(len(deck1)),
         )
 
+    def get_opponent(self, own_id: int) -> CommonUserInBattle:
+        if self.user1.id != own_id:
+            return self.user1
+        return self.user2
 
     def get_users(self) -> tuple[CommonUserInBattle, CommonUserInBattle]:
         return super().get_users()
@@ -252,6 +256,10 @@ class BattleStandard(BattleWithDeck):
             deck_size=DeckSize(len(deck1)),
         )
 
+    def get_opponent(self, own_id: int) -> CommonUserInBattle:
+        if self.user1.id != own_id:
+            return self.user1
+        return self.user2
 
     @override
     def get_users(self) -> tuple[CommonUserInBattle, CommonUserInBattle]:
