@@ -71,7 +71,7 @@ async def handle_user_step(
         return None
 
     used_bonus: int = sum((choice.hits, choice.blocks, choice.bonus))
-    user_action_score: int = battle.get_user(choice.user_id).action_score #type:ignore
+    user_action_score: int = battle.get_user(user_id=choice.user_id).action_score #type:ignore
 
     if used_bonus > user_action_score:
         raise HTTPException(401, "too much used bonus!")
@@ -267,34 +267,48 @@ async def process_action(callback: CallbackQuery, state: FSMContext) -> None:
         return
 
     action_performed = True
-    
+
+    async def handle_action(
+        attr: str,
+        positive_message: str,
+        else_message: str,
+    ) -> None:
+        if data.action_score > 0:
+            data.action_score -= 1
+            if (prev_value := getattr(data, attr)) is None:
+                log.error(
+                    "can't get attribute `%s` of `BattleChoiceTG`\n"
+                    f"Error from `{__file__}` def process_action",
+                    attr)
+
+            setattr(data, attr, 1 + prev_value)
+            await callback.answer(positive_message, show_alert=True)
+        else:
+            await callback.answer(else_message, show_alert=True)
+            return    
+
+
     # Обработка разных действий
     if action == "action_attack":
-        if data.action_score > 0:
-            data.attack_count += 1
-            data.action_score -= 1
-            await callback.answer("🗡 Атака добавлена!")
-        else:
-            await callback.answer("Недостаточно ходов для атаки!", show_alert=True)
-            return
+        await handle_action(
+            "attack_count",
+            positive_message="🗡 Атака добавлена!",
+            else_message="Недостаточно ходов для атаки!",
+        )
 
     elif action == "action_block":
-        if data.action_score > 0:
-            data.block_count += 1
-            data.action_score -= 1
-            await callback.answer("🛡 Блок добавлен!")
-        else:
-            await callback.answer("Недостаточно ходов для блока!", show_alert=True)
-            return
+        await handle_action(
+            "block_count", 
+            "🛡 Блок добавлен!",
+            "Недостаточно ходов для блока!",
+        )
 
     elif action == "action_bonus":
-        if data.action_score > 0:
-            data.bonus_count += 1
-            data.action_score -= 1
-            await callback.answer("⭐ Бонус добавлен!")
-        else:
-            await callback.answer("Недостаточно ходов для бонуса!", show_alert=True)
-            return
+        await handle_action(
+            "bonus_count",
+            "⭐ Бонус добавлен!",
+            "Недостаточно ходов для бонуса!",
+        )
 
     elif action == "action_ability":
         if data.ability_used:
@@ -329,23 +343,25 @@ async def process_action(callback: CallbackQuery, state: FSMContext) -> None:
 
 async def end_turn(message: Message, state: FSMContext, user_id: int):
     """Завершение хода"""
-    if user_id not in user_data:
+    data: Optional[BattleChoiceTG] = user_data.get(user_id)
+    if data is None:
+        log.warning("user isn't in battles")
         return
-        
-    data: BattleChoiceTG = user_data[user_id]
     battle_id: Optional[bytes] = await redis.get(f"battle:{user_id}")
     
-    if not battle_id:
+    if battle_id is None:
         await message.answer("Ошибка: бой не найден")
         return
-        
+
     battle = BattlesManagement.get_battle(battle_id.decode())
     if not battle:
         await message.answer("Ошибка: данные боя не найдены")
         return
 
-    # Передаем ход в логику боя
+    deck = battle.get_deck_by_user(user_id)
+    card = deck[data.current_character - 1]
 
+    # Передаем ход в логику боя
     battle_choice = SStandardBattleChoice(
         user_id,
         battle.id,
@@ -365,7 +381,7 @@ async def end_turn(message: Message, state: FSMContext, user_id: int):
         f"🛡 Блоков: {data.block_count}\n" 
         f"⭐ Бонусов: {data.bonus_count}\n"
         f"🌀 Способность: {'ИСПОЛЬЗОВАНА' if data.ability_used else 'не использована'}\n"
-        f"👤 Персонаж: #{data.current_character} - {data.current_character}"
+        f"👤 Персонаж: #{data.current_character} - {card.name}"
     )
 
     # Отправляем итоги хода
@@ -407,10 +423,19 @@ async def start_new_turn(message: Message, state: FSMContext, user_id: int, batt
     await _cmd_start(message, state, user_data[user_id])
 
 
-async def handle_battle_end(message: Message, battle: Battle_T, user_id: int):
+async def handle_battle_end(
+        message: Message,
+        battle: Battle_T,
+        user_id: int,
+        state: FSMContext,
+    ) -> None:
     """Обработка завершения боя"""
     # Определяем результат боя
     result = battle.check_cards_hp()
+    if result is None:
+        log.warning("called end of battle, when don't all users cards died!")        
+        return
+
     users = battle.get_users()
 
 
@@ -434,21 +459,22 @@ async def handle_battle_end(message: Message, battle: Battle_T, user_id: int):
     # Очищаем данные боя
     if user_id in user_data:
         del user_data[user_id]
+    
+    await state.set_state(None)
     await redis.delete(f"battle:{user_id}")
 
 
 def reset_user_turn(user_id: int, action_score: int = 0):
     """Сброс данных хода пользователя"""
-    if user_id in user_data:
         # Сохраняем текущего персонажа, сбрасываем остальное
-        current_char = user_data[user_id].current_character
-        current_target = user_data[user_id].target_character
-        user_data[user_id] = BattleChoiceTG(
-            current_character=current_char,
-            target_character=current_target,
-            action_score=action_score,
-            attack_count=0,
-            block_count=0,
-            bonus_count=0,
-            ability_used=False
-        )
+    current_char = user_data[user_id].current_character
+    current_target = user_data[user_id].target_character
+    user_data[user_id] = BattleChoiceTG(
+        current_character=current_char,
+        target_character=current_target,
+        action_score=action_score,
+        attack_count=0,
+        block_count=0,
+        bonus_count=0,
+        ability_used=False
+    )

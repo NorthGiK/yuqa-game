@@ -49,7 +49,7 @@ class Battle(ABC):
 
 
 @dataclass(slots=True, eq=False)
-class CommonUserInBattle(ABC):
+class CommonUserInBattle:
     id: int
     step: Optional[SStandardBattleChoice] = None
     action_score: int = 2
@@ -64,6 +64,7 @@ class CommonCardInBattle:
     class_: int
     ability: Ability
     active_abilities: dict[SubAbility, int] = field(default_factory=dict) #type:ignore
+
 
     @log_func_call(log)
     def _apply_stat_change(self, ability_type: AbilityType, value: int) -> None:

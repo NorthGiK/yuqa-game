@@ -4,6 +4,8 @@ from typing import Any, Optional
 from aiogram.fsm.state import State, StatesGroup
 
 
+GET_USER_REDIS = "battle:{}"
+
 @dataclass(frozen=True, slots=True)
 class Navigation:
     main = "MAIN"

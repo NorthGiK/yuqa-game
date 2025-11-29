@@ -88,8 +88,8 @@ class BattleWithDeck(Battle, ABC):
     @abstractmethod
     @log_func_call(log)
     def check_cards_hp(self) -> Optional[int]:
-        not_deck1 = not all(self.deck1)
-        not_deck2 = not all(self.deck2)
+        not_deck1 = not any(card.hp for card in self.deck1)
+        not_deck2 = not any(card.hp for card in self.deck2)
 
         if not_deck1 and not_deck2:
             return 0
