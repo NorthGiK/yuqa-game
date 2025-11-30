@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from src.handlers.telegram.battle import api_router
+from src.handlers.telegram.battle.battle import api_router
 
 
 router = APIRouter()

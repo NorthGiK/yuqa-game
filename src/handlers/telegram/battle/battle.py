@@ -158,11 +158,15 @@ async def show_action_keyboard(clbk: CallbackQuery | Message | None, user_id: in
     builder.button(text="🔀 Сменить персонажа", callback_data="action_change_character")
     builder.button(text="㊗️ Сменить цель", callback_data="action_change_target")
 
+    # Кнопка показа состояния колоды
+    builder.button(text="👤 своя колода", callback_data="show_me")
+    builder.button(text="👁️‍🗨️ колода соперника", callback_data="show_opponent")
+
     # Завершение хода (когда ходы закончились)
     if data.action_score <= 0:
         builder.button(text="✅ Завершить ход", callback_data="action_end_turn")
 
-    builder.adjust(2, 2, 1, 1)  # Разметка кнопок
+    builder.adjust(2, 2, 2, 1, 1)  # Разметка кнопок
 
     # Текст статуса
     status_text = generate_status_text(user_id)
@@ -215,44 +219,50 @@ def generate_status_text(user_id: int) -> str:
     )
 
 
-async def show_character_selection(message: Message, user_id: int, current_character: int) -> None:
-    """Показать выбор персонажа"""
+async def show_character_selection(message: Message, user_id: int, current_character: int):
+    battle_id_bytes: Optional[bytes] = await redis.get(f"battle:{user_id}")
+    if not battle_id_bytes:
+        return await message.answer("Бой не найден")
+
+    battle = BattlesManagement.get_battle(battle_id_bytes.decode())
+    if not battle:
+        return await message.answer("Данные боя не найдены")
+
+    deck = battle.get_deck_by_user(user_id)
     builder = InlineKeyboardBuilder()
-    battle_id = await redis.get(f"battle:{user_id}")
-    battle = BattlesManagement.get_battle(battle_id.decode())
-    if battle is None:
-        return
 
-    # Кнопки выбора персонажа
-    deck: list[CommonCardInBattle] = battle.get_deck_by_user(user_id)
-    for i, card in enumerate(deck, 1):
-        if i == current_character:
-            continue
+    # Показываем только живых персонажей
+    for i, card in enumerate(deck):
+        if card.hp > 0 and i != current_character - 1:
+            builder.button(
+                text=f"Персонаж #{i+1} {card.name} (♥ {card.hp})", 
+                callback_data=f"character_{i+1}"
+            )
 
-        builder.button(text=f"Персонаж #{i} {card.name}", callback_data=f"character_{i}")
+    if builder.buttons:
+        builder.button(text="🔙 Назад", callback_data="character_back")
+        builder.adjust(1)
 
-    # Кнопка назад
-    builder.button(text="🔙 Назад", callback_data="character_back")
-    builder.adjust(2, 2, 1, 1)
-
-    await message.bot.edit_message_text(
-        chat_id=message.chat.id,
-        message_id=user_data[user_id].message_id,
-        text=f"👥 **Выбор персонажа**\nВыберите персонажа (1-{len(deck) + 1}):",
-        parse_mode="markdown",
-        reply_markup=builder.as_markup()
-    )
+        await message.bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=user_data[user_id].message_id,
+            text=f"👥 **Выбор персонажа**\nВыберите персонажа:",
+            parse_mode="markdown",
+            reply_markup=builder.as_markup(),
+        )
+    else:
+        await message.answer("Нет доступных персонажей для смены")
 
 
 async def show_target_selection(message: Message, user_id: int, current_character: int) -> None:
     """Показать выбор персонажа"""
     builder = InlineKeyboardBuilder()
-    
+
     battle_id = await redis.get(f"battle:{user_id}")
     battle = BattlesManagement.get_battle(battle_id.decode())
     if battle is None:
         return
-    
+
     opponent_id = next(user.id for user in battle.get_users() if user.id != user_id)
 
     # Кнопки выбора персонажа
@@ -269,10 +279,69 @@ async def show_target_selection(message: Message, user_id: int, current_characte
     await message.bot.edit_message_text(
         chat_id=message.chat.id,
         message_id=user_data[user_id].message_id,
-        text="👥 **Выбор персонажа**\nВыберите персонажа (1-5):",
+        text="👥 **Выбор цель для атаки**\nВыберите персонажа:",
         parse_mode="markdown",
         reply_markup=builder.as_markup()
     )
+
+
+async def show_target_selection(message: Message, user_id: int, current_character: int):
+    battle_id_bytes: Optional[bytes] = await redis.get(f"battle:{user_id}")
+    if not battle_id_bytes:
+        return await message.answer("Бой не найден")
+
+    battle = BattlesManagement.get_battle(battle_id_bytes.decode())
+    if not battle:
+        return await message.answer("Данные боя не найдены")
+
+    deck = battle.get_deck_by_user(user_id)
+    builder = InlineKeyboardBuilder()
+
+    # Показываем только живых персонажей
+    for i, card in enumerate(deck):
+        if card.hp > 0 and i != current_character - 1:
+            builder.button(
+                text=f"Цель #{i+1} {card.name} (♥ {card.hp})", 
+                callback_data=f"character_{i+1}"
+            )
+
+    if builder.buttons:
+        builder.button(text="🔙 Назад", callback_data="character_back")
+        builder.adjust(1)
+
+        await message.bot.edit_message_text(
+            chat_id=message.chat.id,
+            message_id=user_data[user_id].message_id,
+            text=f"🤯 **Выбор Цели**\nВыберите персонажа:",
+            parse_mode="markdown",
+            reply_markup=builder.as_markup(),
+        )
+    else:
+        await message.answer("Нет доступных целeй для смены")
+
+
+@router.callback_query(F.data.startswith("show_"))
+async def show_deck(clbk: CallbackQuery, state: FSMContext) -> None:
+    """Обработка показа состояния колоды"""
+    await clbk.answer()
+    
+    user_id: int = clbk.from_user.id
+    battle = await BattlesManagement.get_battle_from_user(user_id)
+
+    if clbk.data == "show_me":
+        deck: list[CommonCardInBattle] = battle.get_deck_by_user(user_id)
+        text: str = "🎴 **Твоя Колода:**\n"
+    else:
+        opponent: CommonUserInBattle = battle.get_opponent(user_id)
+        deck: list[CommonCardInBattle] = battle.get_deck_by_user(opponent.id)
+        text = "💢 **Колода Соперника:**\n"
+
+    await clbk.bot.send_message(
+        user_id,
+        text + make_deck_status_text(deck),
+    )
+
+
 
 @router.callback_query(F.data.startswith("character_"))
 async def process_character_selection(callback: CallbackQuery, state: FSMContext):
@@ -325,7 +394,16 @@ async def process_action(callback: CallbackQuery, state: FSMContext) -> None:
     action: str = callback.data
     
     # Проверяем остались ли ходы (кроме смены персонажа и завершения хода)
-    if data.action_score <= 0 and action not in ["action_change_character", "action_end_turn"]:
+    if (
+        data.action_score <= 0 and
+        action not in [
+            "action_change_character",
+            "action_change_target",
+            "show_me",
+            "show_opponent",
+            "action_end_turn",
+        ]
+    ):
         await callback.answer("Ходы закончились! Завершите ход или смените персонажа", show_alert=True)
         return
 
@@ -471,6 +549,14 @@ async def end_turn(message: Message, state: FSMContext, user_id: int):
             await start_new_turn(state, user.id, battle)
 
 
+def make_deck_status_text(deck: list[CommonCardInBattle]) -> str:
+    text: str = ""
+    for i, card in enumerate(deck, 1):
+        text += f"{i}. {card.name} | {card.hp}♥️ {card.atk}⚔️ {card.def_}🛡️\n"
+
+    return text
+
+
 async def start_new_turn(state: FSMContext, user_id: int, battle: Battle_T):
     """Начало нового хода"""
     bot = Config().tg_workflow.bot
@@ -478,17 +564,16 @@ async def start_new_turn(state: FSMContext, user_id: int, battle: Battle_T):
     # Получаем актуальные данные о колоде
     deck = battle.get_deck_by_user(user_id)
 
-    # Формируем информацию о колоде
-    deck_info = "🃏 **Состояние колоды:**\n"
-    for i, card in enumerate(deck, 1):
-        deck_info += f"{i}. {card.name} | {card.hp}♥️ {card.atk}⚔️ {card.def_}🛡️\n"
-
-    # Отправляем обновленную информацию о колоде
-    await bot.send_message(user_id, deck_info, parse_mode="markdown")
-
     # получение кол-ва очков действия
     user = battle.get_user(user_id)
     action_score = user.action_score
+
+    # Формируем информацию о колоде
+    deck_info = "🃏 **Состояние колоды:**\n"
+    deck_info += make_deck_status_text(deck)
+
+    # Отправляем обновленную информацию о колоде
+    await bot.send_message(user_id, deck_info, parse_mode="markdown")
 
     # Сбрасываем данные для нового хода
     await reset_user_turn(user_id, action_score)
@@ -510,16 +595,36 @@ async def handle_battle_end(
         log.warning("called end of battle, when don't all users cards died!")        
         return
 
-    users = battle.get_users()
+    users = list(battle.get_users())
 
+    win_message = "🎉 **Победа!** Вы выиграли бой!"
+    loss_message = "💔 **Поражение!** Вы проиграли бой."
+    oppoennt_id: int = next(user for user in users if user.id != user_id).id
 
     if len(users) == 2:
         if result == user_id:
-            text = "🎉 **Победа!** Вы выиграли бой!"
-        elif result == 0:  # Ничья
+            text = loss_message
+
+            await message.bot.send_message(
+                oppoennt_id,
+                win_message,
+                parse_mode="markdown",
+            )
+        elif result != 0:
+            text = win_message
+
+            await message.bot.send_message(
+                oppoennt_id,
+                loss_message,
+                parse_mode="markdown",
+            )
+        else:  # Ничья
             text = "🤝 **Ничья!**"
-        else:
-            text = "💔 **Поражение!** Вы проиграли бой."
+            await message.bot.send_message(
+                oppoennt_id,
+                text,
+                parse_mode="markdown",
+            )
     else:
         text = "⚔️ **Бой завершен!**"
 
@@ -533,9 +638,10 @@ async def handle_battle_end(
     # Очищаем данные боя
     if user_id in user_data:
         del user_data[user_id]
-    
-    await state.set_state(None)
-    await redis.delete(f"battle:{user_id}")
+        del user_data[oppoennt_id]
+
+    await redis.delete(USER_BATTLE_REDIS.format(id=user_id))
+    await redis.delete(USER_BATTLE_REDIS.format(id=oppoennt_id))
 
 
 async def reset_user_turn(user_id: int, action_score: int = 0):

@@ -23,8 +23,10 @@ from src.battles.exceptions import (
 from src.battles.models import BattleType
 from src.battles.schemas import SStandardBattleChoice
 from src.cards.crud import get_cards_by_user_id 
+from src.handlers.telegram.constants import USER_BATTLE_REDIS
 from src.logs import dev_configure, get_logger
 from src.utils.decorators import log_func_call
+from src.utils.redis_cache import redis
 from src.utils.patterns import Singletone
 from src.battles.logic.common import (
     Battle,
@@ -337,6 +339,17 @@ class _BattlesManagement(Singletone):
     def get_battle(self, id: str | Any) -> Optional[Battle_T]:
         return self.battles.get(id, None)
 
+
+    @log_func_call(log)
+    async def get_battle_from_user(self, id: int) -> Battle_T:
+        battle_id: Optional[bytes] = await redis.get(USER_BATTLE_REDIS.format(id=id))
+        if battle_id is None:
+            raise Exception("can't get battle id from redis")
+        battle: Optional[Battle_T] = self.get_battle(battle_id.decode())
+        if battle is None:
+            raise Exception("can't get battle from `BattlesManagement`")
+
+        return battle
 
     @log_func_call(log)
     def remove_battle(self, battle_id: str) -> bool:

@@ -1,7 +1,7 @@
 from aiogram import Router
 
 from src.handlers.telegram.common import router as main_router
-from src.handlers.telegram.battle import router as battle_router
+from src.handlers.telegram.battle.battle import router as battle_router
 
 
 router = Router()
