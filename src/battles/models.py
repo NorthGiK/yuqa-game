@@ -15,5 +15,5 @@ class MBattleQueue(Base):
 
 @dataclass(slots=True, frozen=True)
 class BattleType:
-    duo = "duo"
-    standard = "standard"
+    duo = "Дуо"
+    standard = "Стандарт"

@@ -1,6 +1,8 @@
 from aiogram import F, Router
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.base import StorageKey
+from aiogram.fsm.storage.memory import MemoryStorage
 from fastapi import APIRouter, HTTPException
 
 from datetime import datetime
@@ -20,6 +22,8 @@ from src.constants import BattleInProcessOrEnd, BattleState
 from src.database.core import AsyncSessionLocal
 from src.handlers.rabbit.constants import INIT_BATTLE_QUEUE
 from src.handlers.rabbit.core import rabbit
+from src.handlers.telegram.battle.callbacks_data import ACTION_ABILITY, ACTION_ATTACK, ACTION_BLOCK, ACTION_BONUS, ACTION_CHANGE_CHARACTER, ACTION_CHANGE_TARGET, ACTION_END_TURN, ACTION_SHOW_DECK_STATUS, ACTION_SHOW_OPPONENT_STATUS
+from src.handlers.telegram.battle.raw_data import ABILITY_BUTTON, ATTACK_BUTTON, BLOCK_BUTTON, BONUS_BUTTON, CHANGE_CARD_BUTTON, CHANGE_TARGET_BUTTON, END_ROUND_BUTTON, ERROR_START_CMD_WITHOUT_ARGUMENTS, SHOW_DECK_BUTTON, SHOW_OPPOENT_BUTTON
 from src.utils.redis_cache import redis
 from src.handlers.telegram.constants import (
     USER_BATTLE_REDIS,
@@ -37,57 +41,23 @@ api_router = APIRouter()
 log = get_logger(__name__)
 dev_configure()
 
-class User(BaseModel):
-    rating: int
-    inventory: list[int]
-    deck: list[int]
-    created_at: datetime
-    active: bool = True
+async def delete_user_state(user_id: int) -> None:
+    """Обновить данные пользователя"""
+    storage = config.tg_workflow.storage
+    bot = config.tg_workflow.bot
+
+    key = StorageKey(chat_id=user_id, user_id=user_id, bot_id=bot.id)
+    await storage.set_state(key=key)
 
 
-@api_router.post("/create_user")
-async def create_user_handler(data: User):
-    if data.inventory == [0]:
-        data.inventory = [1, 2]
-    if data.deck == [0]:
-        data.deck = [1,2]
+async def create_battle_state(user_id: int) -> None:
+    bot = config.tg_workflow.bot
+    storage = config.tg_workflow.storage
 
-    user = MUser(**data.model_dump())
-    async with AsyncSessionLocal() as session:
-        session.add(user)
-        await session.commit()
+    key = StorageKey(chat_id=user_id, user_id=user_id, bot_id=bot.id)
+    await storage.set_state(key=key, state=GameStates.waiting_for_action)
 
-    return "OK"
-
-
-@api_router.post("/start_battle")
-async def start_duo_battle_api(
-    user_id: int,
-    type: str,
-) -> Optional[bool]:
-    return await start_battle(user_id=user_id, type=type)
-
-
-@api_router.post("/process_battle")
-async def handle_user_step(
-		choice: SStandardBattleChoice,
-	) -> Optional[BattleInProcessOrEnd]:
-    battle = BattlesManagement.get_battle(choice.battle_id)
-    if battle is None:
-        return None
-
-    used_bonus: int = sum((choice.hits, choice.blocks, choice.bonus))
-    user_action_score: int = battle.get_user(user_id=choice.user_id).action_score #type:ignore
-
-    if used_bonus > user_action_score:
-        raise HTTPException(401, "too much used bonus!")
-    elif used_bonus < user_action_score:
-        raise HTTPException(401, "too few used bonus!")
-
-    return battle.add_step(choice=choice)
-
-
-@router.message(F.text == "Дуо")
+@router.message(F.text == BattleType.duo)
 async def start_duo_battle(msg: Message) -> None:
     user_id: int = msg.from_user.id
 
@@ -97,44 +67,34 @@ async def start_duo_battle(msg: Message) -> None:
 @rabbit.subscriber(INIT_BATTLE_QUEUE)
 async def confirm_battle(users: Collection[int]) -> None:
     for user in users:
-        if not await redis.get(f"battle:{user}"):
-            raise Exception("don't found user in battle!\n"
-                            f"user id: `{user}`"
-                            )
-    
-    for user in users:
-        await config.tg_workflow.bot.send_message(
-            user,
-            "***бой найден!*** согласен начать его?",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                [ InlineKeyboardButton(text="Да!", callback_data="init_battle_in_tg") ]
-            ]),
-            parse_mode="markdown",
-        )
+        await _cmd_start(user_id=user)
 
 
 async def _cmd_start(
-        clbk: Message | CallbackQuery | None,
-        user_id: int,
-        state: FSMContext,
-        exist_choice: Optional[BattleChoiceTG] = None,
+        clbk: Message | CallbackQuery | None = None,
+        user_id: Optional[int] = None,
+        state: Optional[FSMContext] = None,
     ) -> None:
     """Инициализация игры"""
     # Инициализация данных пользователя
-    user_data[user_id] = exist_choice or BattleChoiceTG()
+    if (clbk is None) and (user_id is None):
+        log.error(ERROR_START_CMD_WITHOUT_ARGUMENTS)
+        return
 
-    await state.set_state(GameStates.waiting_for_action)
+    user_id = user_id if user_id else clbk.from_user.id
+    if user_data.get(user_id) is None:
+        user_data[user_id] = BattleChoiceTG()
 
+    if state is None:
+        await create_battle_state(user_id)
     await show_action_keyboard(clbk, user_id)
 
 
 @router.callback_query(F.data == "init_battle_in_tg")
 async def cmd_start_handler(
     clbk: CallbackQuery | Message,
-    state: FSMContext,
-    params: dict[str, Any] | None = None
 ) -> None:
-    return await _cmd_start(clbk, clbk.from_user.id, state)
+    return await _cmd_start(clbk=clbk)
 
 
 async def show_action_keyboard(clbk: CallbackQuery | Message | None, user_id: int):
@@ -149,22 +109,22 @@ async def show_action_keyboard(clbk: CallbackQuery | Message | None, user_id: in
 
     # Кнопки действий (всегда активны, если есть ходы)
     if data.action_score > 0:
-        builder.button(text=f"🗡 Атака ({data.attack_count})", callback_data="action_attack")
-        builder.button(text=f"🛡 Блок ({data.block_count})", callback_data="action_block")
-        builder.button(text=f"⭐ Бонус ({data.bonus_count})", callback_data="action_bonus")
-        builder.button(text=f"🌀 Способность", callback_data="action_ability")
+        builder.button(text=ATTACK_BUTTON.format(data.attack_count), callback_data=ACTION_ATTACK)
+        builder.button(text=BLOCK_BUTTON.format(data.block_count), callback_data=ACTION_BLOCK)
+        builder.button(text=BONUS_BUTTON.format(data.bonus_count), callback_data=ACTION_BONUS)
+        builder.button(text=ABILITY_BUTTON, callback_data=ACTION_ABILITY)
 
     # Кнопка смены персонажа (всегда активна)
-    builder.button(text="🔀 Сменить персонажа", callback_data="action_change_character")
-    builder.button(text="㊗️ Сменить цель", callback_data="action_change_target")
+    builder.button(text=CHANGE_CARD_BUTTON, callback_data=ACTION_CHANGE_CHARACTER)
+    builder.button(text=CHANGE_TARGET_BUTTON, callback_data=ACTION_CHANGE_TARGET)
 
     # Кнопка показа состояния колоды
-    builder.button(text="👤 своя колода", callback_data="show_me")
-    builder.button(text="👁️‍🗨️ колода соперника", callback_data="show_opponent")
+    builder.button(text=SHOW_DECK_BUTTON, callback_data=ACTION_SHOW_DECK_STATUS)
+    builder.button(text=SHOW_OPPOENT_BUTTON, callback_data=ACTION_SHOW_OPPONENT_STATUS)
 
     # Завершение хода (когда ходы закончились)
     if data.action_score <= 0:
-        builder.button(text="✅ Завершить ход", callback_data="action_end_turn")
+        builder.button(text=END_ROUND_BUTTON, callback_data=ACTION_END_TURN)
 
     builder.adjust(2, 2, 2, 1, 1)  # Разметка кнопок
 
@@ -186,8 +146,6 @@ async def show_action_keyboard(clbk: CallbackQuery | Message | None, user_id: in
 
     # Если сообщения нет или редактирование не удалось - отправляем новое
     if isinstance(clbk, CallbackQuery):
-        if clbk.message is None:
-            raise Exception("message is None!! fuck blyat!")
         msg = await clbk.message.answer(status_text, reply_markup=builder.as_markup())
 
     elif isinstance(clbk, Message):
@@ -320,174 +278,6 @@ async def show_target_selection(message: Message, user_id: int, current_characte
         await message.answer("Нет доступных целeй для смены")
 
 
-@router.callback_query(F.data.startswith("show_"))
-async def show_deck(clbk: CallbackQuery, state: FSMContext) -> None:
-    """Обработка показа состояния колоды"""
-    await clbk.answer()
-    
-    user_id: int = clbk.from_user.id
-    battle = await BattlesManagement.get_battle_from_user(user_id)
-
-    if clbk.data == "show_me":
-        deck: list[CommonCardInBattle] = battle.get_deck_by_user(user_id)
-        text: str = "🎴 **Твоя Колода:**\n"
-    else:
-        opponent: CommonUserInBattle = battle.get_opponent(user_id)
-        deck: list[CommonCardInBattle] = battle.get_deck_by_user(opponent.id)
-        text = "💢 **Колода Соперника:**\n"
-
-    await clbk.bot.send_message(
-        user_id,
-        text + make_deck_status_text(deck),
-    )
-
-
-
-@router.callback_query(F.data.startswith("character_"))
-async def process_character_selection(callback: CallbackQuery, state: FSMContext):
-    """Обработка выбора персонажа"""
-    user_id = callback.from_user.id
-
-    if callback.data == "character_back":
-        # Возврат к основному меню
-        await show_action_keyboard(callback, user_id)
-        await callback.answer()
-        return
-
-    # Извлекаем номер персонажа
-    character_num = int(callback.data.split("_")[-1])
-    user_data[user_id].current_character = character_num
-
-    await callback.answer(f"Персонаж #{character_num} выбран!")
-    await show_action_keyboard(callback.message, user_id)
-
-
-@router.callback_query(F.data.startswith("target_"))
-async def process_target_selection(callback: CallbackQuery, state: FSMContext):
-    """Обработка выбора персонажа"""
-    user_id = callback.from_user.id
-
-    if callback.data == "target_back":
-        # Возврат к основному меню
-        await show_action_keyboard(callback, user_id)
-        await callback.answer()
-        return
-
-    # Извлекаем номер персонажа
-    target_num = int(callback.data.split("_")[-1])
-    user_data[user_id].target_character = target_num
-
-    await callback.answer(f"Цель #{target_num} выбран!")
-    await show_action_keyboard(callback.message, user_id)
-
-
-@router.callback_query(F.data.startswith("action_"), GameStates.waiting_for_action)
-async def process_action(callback: CallbackQuery, state: FSMContext) -> None:
-    """Обработка действий игрока"""
-    user_id: int = callback.from_user.id
-    
-    if user_id not in user_data:
-        await callback.answer("Ошибка: данные не найдены", show_alert=True)
-        return
-    
-    data: BattleChoiceTG = user_data[user_id]
-    action: str = callback.data
-    
-    # Проверяем остались ли ходы (кроме смены персонажа и завершения хода)
-    if (
-        data.action_score <= 0 and
-        action not in [
-            "action_change_character",
-            "action_change_target",
-            "show_me",
-            "show_opponent",
-            "action_end_turn",
-        ]
-    ):
-        await callback.answer("Ходы закончились! Завершите ход или смените персонажа", show_alert=True)
-        return
-
-    action_performed = True
-
-    async def handle_action(
-        attr: str,
-        positive_message: str,
-        else_message: str,
-    ) -> None:
-        if data.action_score > 0:
-            data.action_score -= 1
-            if (prev_value := getattr(data, attr)) is None:
-                log.error(
-                    "can't get attribute `%s` of `BattleChoiceTG`\n"
-                    f"Error from `{__file__}` def process_action",
-                    attr)
-
-            setattr(data, attr, 1 + prev_value)
-            await callback.answer(positive_message)
-        else:
-            await callback.answer(else_message)
-            return    
-
-
-    # Обработка разных действий
-    if action == "action_attack":
-        await handle_action(
-            "attack_count",
-            positive_message="🗡 Атака добавлена!",
-            else_message="Недостаточно ходов для атаки!",
-        )
-
-    elif action == "action_block":
-        await handle_action(
-            "block_count", 
-            "🛡 Блок добавлен!",
-            "Недостаточно ходов для блока!",
-        )
-
-    elif action == "action_bonus":
-        await handle_action(
-            "bonus_count",
-            "⭐ Бонус добавлен!",
-            "Недостаточно ходов для бонуса!",
-        )
-
-    elif action == "action_ability":
-        if data.ability_used:
-            await callback.answer("Способность уже использована!", show_alert=True)
-            return
-        if data.action_score >= 5:  # Проверяем достаточно ли ходов для способности
-            data.ability_used = True
-            data.action_score -= 5
-            await callback.answer("🌀 Способность активирована!")
-        else:
-            await callback.answer("Недостаточно ходов для способности! Нужно 5 ходов.", show_alert=True)
-            return
-
-    elif action == "action_change_character":
-        current_card = data.current_character
-        await show_character_selection(callback.message, user_id, current_card)
-        await callback.answer()
-        return
-
-    elif action == "action_change_target":
-        current_target = data.target_character
-        await show_target_selection(callback.message, user_id, current_target)
-        await callback.answer()
-        return
-
-    elif action == "action_end_turn":
-        await callback.answer()
-        await end_turn(callback.message, state, user_id)
-        return
-
-    else:
-        action_performed = False
-
-    # Обновляем клавиатуру только если было выполнено действие
-    if action_performed:
-        await show_action_keyboard(callback, user_id)
-
-
 async def end_turn(message: Message, state: FSMContext, user_id: int):
     """Завершение хода"""
     data: Optional[BattleChoiceTG] = user_data.get(user_id)
@@ -579,7 +369,7 @@ async def start_new_turn(state: FSMContext, user_id: int, battle: Battle_T):
     await reset_user_turn(user_id, action_score)
 
     # Начинаем новый ход
-    await _cmd_start(None, user_id, state, user_data[user_id])
+    await _cmd_start(user_id=user_id, state=state)
 
 
 async def handle_battle_end(
@@ -636,12 +426,10 @@ async def handle_battle_end(
     )
 
     # Очищаем данные боя
-    if user_id in user_data:
-        del user_data[user_id]
-        del user_data[oppoennt_id]
-
-    await redis.delete(USER_BATTLE_REDIS.format(id=user_id))
-    await redis.delete(USER_BATTLE_REDIS.format(id=oppoennt_id))
+    for user in battle.get_users():
+        del user_data[user.id]
+        await redis.delete(USER_BATTLE_REDIS.format(id=user.id))
+        await delete_user_state(user.id)
 
 
 async def reset_user_turn(user_id: int, action_score: int = 0):

@@ -4,6 +4,7 @@ from typing import Optional, Any
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.fsm.storage.memory import MemoryStorage
 from dotenv import load_dotenv
 
 from src.utils.patterns import Singletone
@@ -49,6 +50,7 @@ class TGWorkflowConfig(Singletone):
 	default = DefaultBotProperties(parse_mode="markdown")
 	bot = Bot(TG_API_KEY, default=default)
 	dp = Dispatcher()
+	storage = MemoryStorage()
 	ADMIN_ID = int(_custom_getenv("ADMIN_ID", 0))
 
 
