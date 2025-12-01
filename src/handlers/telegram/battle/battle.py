@@ -23,7 +23,7 @@ from src.database.core import AsyncSessionLocal
 from src.handlers.rabbit.constants import INIT_BATTLE_QUEUE
 from src.handlers.rabbit.core import rabbit
 from src.handlers.telegram.battle.callbacks_data import ACTION_ABILITY, ACTION_ATTACK, ACTION_BLOCK, ACTION_BONUS, ACTION_CHANGE_CHARACTER, ACTION_CHANGE_TARGET, ACTION_END_TURN, ACTION_SHOW_DECK_STATUS, ACTION_SHOW_OPPONENT_STATUS
-from src.handlers.telegram.battle.raw_data import ABILITY_BUTTON, ATTACK_BUTTON, BLOCK_BUTTON, BONUS_BUTTON, CHANGE_CARD_BUTTON, CHANGE_TARGET_BUTTON, END_ROUND_BUTTON, ERROR_START_CMD_WITHOUT_ARGUMENTS, SHOW_DECK_BUTTON, SHOW_OPPOENT_BUTTON
+from src.handlers.telegram.battle.raw_data import ABILITY_BUTTON, ATTACK_BUTTON, BLOCK_BUTTON, BONUS_BUTTON, CHANGE_CARD_BUTTON, CHANGE_TARGET_BUTTON, END_ROUND_BUTTON, ERROR_START_CMD_WITHOUT_ARGUMENTS, SHOW_DECK_BUTTON, SHOW_OPPOENT_BUTTON, generate_status_text
 from src.utils.redis_cache import redis
 from src.handlers.telegram.constants import (
     USER_BATTLE_REDIS,
@@ -160,21 +160,6 @@ async def show_action_keyboard(clbk: CallbackQuery | Message | None, user_id: in
         )
 
     user_data[user_id].message_id = msg.message_id
-
-
-def generate_status_text(user_id: int) -> str:
-    """Генерация текста статуса"""
-    data = user_data[user_id]
-    return (
-        f"🎮 **Ход игрока**\n"
-        f"👤 Персонаж: #{data.current_character}\n"
-        f"🎯 Осталось ходов: {data.action_score}\n"
-        f"🗡 Атак: {data.attack_count} | "
-        f"🛡 Блоков: {data.block_count} | "
-        f"⭐ Бонусов: {data.bonus_count}\n"
-        f"🌀 Способность: {'ИСПОЛЬЗОВАНА' if data.ability_used else 'доступна'}\n"
-        f"\nВыберите действие:"
-    )
 
 
 async def show_character_selection(message: Message, user_id: int, current_character: int):

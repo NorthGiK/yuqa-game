@@ -9,6 +9,7 @@ from aiogram.types import (
 
 from src.handlers.telegram.constants import Navigation
 from src.cards.models import MCard, Rarity
+from src.handlers.rabbit.constants import PIT_GOLD
 
 
 def _return_to(where: Annotated[str, Navigation], inline: bool = True) -> list[InlineKeyboardButton] | list[KeyboardButton]:
@@ -30,6 +31,7 @@ main = InlineKeyboardMarkup(inline_keyboard=[
         InlineKeyboardButton(text="Бой", callback_data=Navigation.battle),
         InlineKeyboardButton(text="Магазин", callback_data=Navigation.shop),
     ],
+    [ InlineKeyboardButton(text="Баннеры", callback_data=Navigation.gacha) ],
     [
         InlineKeyboardButton(text="  Экскурсия по YUQA", callback_data=Navigation.tour)
     ]
@@ -70,3 +72,8 @@ battle = ReplyKeyboardMarkup(keyboard=[
     ],
     _return_to("", False),
 ], resize_keyboard=True)
+
+gacha = InlineKeyboardMarkup(inline_keyboard=[
+    [ InlineKeyboardButton(text="Золотая крутка", callback_data=PIT_GOLD) ],
+    _return_to(Navigation.main),
+])

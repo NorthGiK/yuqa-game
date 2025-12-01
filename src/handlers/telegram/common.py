@@ -3,20 +3,19 @@ from typing import Optional, Union
 from aiogram import F, Router
 from aiogram.filters import (
     CommandStart,
-    Command,
 )
 from aiogram.types import (
     Message,
     CallbackQuery,
 )
 
+from src.handlers.raw_text import GREETING_NEW_USER_MESSAGE, GREETING_USER_MESSAGE
 from src.handlers.telegram import constants
 from src.handlers.telegram.components import tabs
 from src.cards.models import MCard, Rarity
-from src.cards.crud import get_cards_by_rarity
+from src.cards.crud import CardRepository
 from src.logs import dev_configure, get_logger
-from src.users.crud import check_user, create_user, get_user
-from src.utils.decorators import log_func_call
+from src.users.crud import UserRepository
 from src.utils.redis_cache import redis
 
 
@@ -34,21 +33,23 @@ async def _start(msg: Union[Message, CallbackQuery]):
     username: Optional[str] = user.username
     user_id: int = user.id
 
-    if not await check_user(user_id):
-        await create_user(user_id)
-        await msg.answer(f"Добро пожаловать, пидр по имени {username}! {user_id}",
-                        reply_markup=tabs.main)
+    if not await UserRepository.check_user(user_id):
+        await UserRepository.create_user(user_id)
+        await msg.answer(
+            GREETING_NEW_USER_MESSAGE.format(username=username),
+            reply_markup=tabs.main,
+        )
         return
 
     answer = dict(
-        text=f"Привет, пидр по имени {username}",
+        text=GREETING_USER_MESSAGE.format(username=username),
         reply_markup=tabs.main,
     )
     if isinstance(msg, CallbackQuery):
-        await msg.answer() #type:ignore
-        await msg.message.answer(**answer)#type:ignore
+        await msg.answer()
+        await msg.message.answer(**answer)
     else:
-        await msg.answer(**answer) #type:ignore
+        await msg.answer(**answer)
 
 @router.message(CommandStart())
 async def start_handler(msg: Message):
@@ -76,8 +77,8 @@ async def _show_cards_for_rarity(
     clbk: CallbackQuery,
     rarity: Rarity,
 ) -> None:
-    user_id: int = clbk.from_user.id #type:ignore
-    cards: list[MCard] = await get_cards_by_rarity(rarity=rarity, user_id=user_id)
+    user_id: int = clbk.from_user.id
+    cards: list[MCard] = await CardRepository.get_cards_by_rarity(rarity=rarity, user_id=user_id)
 
     page_num = int(await redis.get(f"inventory:{rarity.name}"))
 
@@ -104,7 +105,7 @@ async def inventory_handler(clbk: CallbackQuery):
     await clbk.answer("")
 
     id = clbk.from_user.id
-    user = await get_user(id)
+    user = await UserRepository.get_user(id)
     if user is None:
         await clbk.answer("type `/start` first")
         return
@@ -128,3 +129,4 @@ async def battle_handler(clbk: CallbackQuery):
 
     await clbk.message.answer(text="Выбирай тип боя",
                               reply_markup=tabs.battle)
+

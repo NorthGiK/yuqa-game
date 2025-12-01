@@ -22,7 +22,7 @@ from src.battles.exceptions import (
 )
 from src.battles.models import BattleType
 from src.battles.schemas import SStandardBattleChoice
-from src.cards.crud import get_cards_by_user_id 
+from src.cards.crud import CardRepository
 from src.handlers.telegram.constants import USER_BATTLE_REDIS
 from src.logs import dev_configure, get_logger
 from src.utils.decorators import log_func_call
@@ -310,8 +310,8 @@ class _BattlesManagement(Singletone):
         usr2: int,
         type: Annotated[str, BattleType],
     ) -> Optional[str]:
-        deck1 = await get_cards_by_user_id(usr1)
-        deck2 = await get_cards_by_user_id(usr2)
+        deck1 = await CardRepository.get_cards_by_user_id(usr1)
+        deck2 = await CardRepository.get_cards_by_user_id(usr2)
 
         if (not deck1) or (not deck2):
             return None

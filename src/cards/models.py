@@ -1,8 +1,9 @@
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, Iterable
+from typing import Any, Optional, Iterable
 
-from sqlalchemy import JSON, Column, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, ForeignKey, BINARY
+from sqlalchemy.orm import Mapped, mapped_column
 
 from src.database.BaseModel import Base
 
@@ -10,32 +11,37 @@ from src.database.BaseModel import Base
 class MCard(Base):
     __tablename__ = "cards"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
 
-    name = Column(String, unique=True)
+    name: Mapped[int] = mapped_column(unique=True)
 
-    universe = Column(String(50))
-    rarity = Column(String(50))
+    universe: Mapped[str] = mapped_column()
+    rarity: Mapped[str] = mapped_column()
+    image: Mapped[str] = mapped_column()
 
-    ability_id = Column(Integer, ForeignKey("abilities.id"), unique=True)
-    description = Column(Text)
+    ability_id: Mapped[int] = mapped_column(ForeignKey("abilities.id"), nullable=True)
+    description: Mapped[str] = mapped_column()
 
-    class_ = Column(String)
+    class_: Mapped[str] = mapped_column()
 
-    atk = Column(Integer)
-    hp = Column(Integer)
-    def_ = Column(Integer)
+    atk: Mapped[int] = mapped_column()
+    hp: Mapped[int] = mapped_column()
+    def_: Mapped[int] = mapped_column()
 
 
 class MAbilities(Base):
     __tablename__ = "abilities"
 
-    id = Column(Integer, primary_key=True)
-    sub_abilities = Column(JSON)
-    card_id = Column(Integer, ForeignKey("cards.id"), unique=True)
-    cooldown = Column(Integer)
-    duration = Column(Integer)
-    cost = Column(Integer)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    sub_abilities: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        default=dict,
+        doc="annotated SubAbility as json(dict)"
+    )
+    card_id: Mapped[int] = mapped_column(ForeignKey(MCard.id), unique=True)
+    cooldown: Mapped[int] = mapped_column()
+    duration: Mapped[int] = mapped_column()
+    cost: Mapped[int] = mapped_column()
 
 
 class Rarity(Enum):
@@ -50,10 +56,10 @@ class Card:
     hp: int
     def_: int
     ability: 'Ability'
-    id: int = None #type:ignore
-    name: str = None #type:ignore
-    universe: str = None #type:ignore
-    rarity: Rarity = None #type:ignore
+    id: Optional[int] = None
+    name: Optional[str] = None
+    universe: Optional[str] = None
+    rarity: Optional[Rarity] = None
     pos: Optional[int] = field(default=None)
 
 
