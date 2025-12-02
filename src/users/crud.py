@@ -1,13 +1,13 @@
 from dataclasses import dataclass
-from typing import Optional
+from typing import Annotated, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from src.database.core import AsyncSessionLocal
 from src.users.models import MUser
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class UserRepository:
     db = AsyncSessionLocal
 
@@ -28,7 +28,7 @@ class UserRepository:
             user: Optional[MUser] = (await db_session.execute(stmt)).scalar_one_or_none()
 
         return user
-    
+
 
     @classmethod
     async def get_user_inventory(cls, id: int) -> Optional[list[int]]:
@@ -36,19 +36,31 @@ class UserRepository:
 
         async with cls.db() as db:
             deck: Optional[list[int]] = (await db.execute(stmt)).scalar_one_or_none()
-        
+
         return deck
 
     @classmethod
-    async def add_new_card(cls, user_id: int, card_id: int) -> bool:
-        stmt = select(MUser).where(MUser.id == user_id)
+    async def add_new_card(cls, user_id: int, card_id: int | Annotated[str, int]) -> bool:
+        if isinstance(card_id, int):
+            card_id = str(card_id)
+
         async with cls.db() as db:
-            user: Optional[MUser] = (await db.execute(stmt)).scalar_one_or_none()
+            stmt = select(MUser).where(MUser.id == user_id)
+            user = (await db.execute(stmt)).scalar_one_or_none()
             if not user:
                 return False
 
-            user.inventory.append(card_id)
-            await db.refresh(user)
+            if card_id in user.inventory.keys():
+                user.inventory[card_id] += 1
+            else:
+                user.inventory[card_id] = 1
+
+            updt = (
+                update(MUser)
+                .where(MUser.id == user_id)
+                .values(inventory=user.inventory)
+            )
+            await db.execute(updt)
             await db.commit()
 
         return True
@@ -62,11 +74,11 @@ class UserRepository:
 
         new_user = MUser(
             id=id,
-            inventory=[1,2],
+            inventory={1: 1, 2: 1},
             deck=[1,2],
         )
 
-        async with AsyncSessionLocal() as db_session:
+        async with cls.db() as db_session:
             db_session.add(new_user)
             await db_session.commit()
 
@@ -77,7 +89,7 @@ class UserRepository:
     async def delete_user(cls, id: int) -> bool:
         query = select(MUser).where(MUser.id == id)
 
-        async with AsyncSessionLocal() as db_session:
+        async with cls.db() as db_session:
             user: Optional[MUser] = (await db_session.execute(query)).scalar_one_or_none()
             if user is None:
                 return False

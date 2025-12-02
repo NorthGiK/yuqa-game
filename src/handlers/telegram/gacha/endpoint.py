@@ -1,7 +1,7 @@
-from typing import Optional, Union
+from typing import Optional, TypedDict, Union
 
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, FSInputFile, URLInputFile
+from aiogram.types import Message, CallbackQuery, FSInputFile
 
 from src.cards.models import MCard
 from src.core.settings import Config
@@ -25,16 +25,16 @@ async def show_main_gacha_message(
 	send_data = dict(
 		text=MAIN_GACHA_MESSAGE,
 		reply_markup=tabs.gacha,
-		parse_mode="markdown",		
+		parse_mode="markdown",
 	)
 
 	async def send_callback() -> None:
 		await msg.answer()
 		await msg.message.answer(**send_data)
-	
+
 	async def send_message() -> None:
 		await msg.answer(**send_data)
-	
+
 	async def send_bot() -> None:
 		bot = Config().tg_workflow.bot
 		await bot.send_message(
@@ -64,6 +64,7 @@ async def pit_legendary_handler(clbk: CallbackQuery) -> None:
 	rarity = RandomManager().choose_rarity().value
 
 	earned_card: MCard = await RandomManager().choose_card(rarity, universe=None)
+	await UserRepository.add_new_card(clbk.from_user.id, earned_card.id)
 
 	await clbk.message.answer_photo(
 		photo=FSInputFile(f"static/{earned_card.image}"),

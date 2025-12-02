@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Annotated, Optional
 
 from sqlalchemy import DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
@@ -10,6 +10,7 @@ from src.database.BaseModel import Base
 
 
 CardId = int
+count = int
 
 def get_time() -> datetime:
     return datetime.now(timezone.utc)
@@ -20,9 +21,9 @@ class MUser(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
 
     rating: Mapped[int] = mapped_column(insert_default=1)
-    inventory: Mapped[list[CardId]] = mapped_column(
+    inventory: Mapped[dict[Annotated[str, CardId], count]] = mapped_column(
         JSON,
-        default=list,
+        default=dict,
         insert_default=[1, 2],
     )
     deck: Mapped[list[CardId]] = mapped_column(

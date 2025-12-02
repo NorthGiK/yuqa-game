@@ -2,8 +2,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional, Iterable
 
-from sqlalchemy import JSON, ForeignKey, BINARY
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import JSON, ForeignKey
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.BaseModel import Base
 
@@ -19,7 +19,7 @@ class MCard(Base):
     rarity: Mapped[str] = mapped_column()
     image: Mapped[str] = mapped_column()
 
-    ability_id: Mapped[int] = mapped_column(ForeignKey("abilities.id"), nullable=True)
+    ability_id: Mapped[int] = mapped_column("abilities.id", nullable=True)
     description: Mapped[str] = mapped_column()
 
     class_: Mapped[str] = mapped_column()
@@ -38,7 +38,7 @@ class MAbilities(Base):
         default=dict,
         doc="annotated SubAbility as json(dict)"
     )
-    card_id: Mapped[int] = mapped_column(ForeignKey(MCard.id), unique=True)
+    card_id: Mapped[int] = mapped_column("users_t.id", unique=True)
     cooldown: Mapped[int] = mapped_column()
     duration: Mapped[int] = mapped_column()
     cost: Mapped[int] = mapped_column()

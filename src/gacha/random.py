@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from fractions import Fraction
 import random
-from typing import Optional
+from typing import Annotated, Optional
 
 from sqlalchemy import func, select
 
@@ -39,7 +39,7 @@ class RandomManager(Singletone):
     @classmethod
     async def choose_card(
         cls,
-        rarity: Rarity,
+        rarity: Rarity | Annotated[str, Rarity],
         universe: Optional[str] = None,
     ) -> MCard:
         async with AsyncSessionLocal() as session:
