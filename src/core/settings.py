@@ -51,7 +51,7 @@ class TGWorkflowConfig(Singletone):
 	bot = Bot(TG_API_KEY, default=default)
 	dp = Dispatcher()
 	storage = MemoryStorage()
-	ADMIN_ID = int(_custom_getenv("ADMIN_ID", 0))
+	ADMIN_ID = int(_custom_getenv("ADMIN_ID"))
 
 
 @dataclass(frozen=True, eq=False)

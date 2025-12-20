@@ -1,4 +1,4 @@
-from typing import Optional, TypedDict, Union
+from typing import Optional, Union
 
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, FSInputFile

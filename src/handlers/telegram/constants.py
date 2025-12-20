@@ -7,7 +7,7 @@ from aiogram.fsm.state import State, StatesGroup
 USER_BATTLE_REDIS = "battle:{id}"
 
 
-@dataclass(frozen=True, slots=True, eq=False)
+@dataclass(frozen=True, slots=True, eq=False, init=False)
 class Navigation:
     main = "MAIN"
     profile = "PROFILE"
@@ -16,6 +16,14 @@ class Navigation:
     gacha = "GACHA"
     inventory = "INVENTORY"
     tour = "TOUR"
+    admin = "ADMIN"
+
+    @dataclass(frozen=True)
+    class in_admin:
+        create_universe = "CREATE UNIVERSE"
+        create_card = "CREATE CARD"
+        create_banner = "CREATE BANNER"
+
 
     @dataclass(frozen=True, slots=True)
     class in_inventory:

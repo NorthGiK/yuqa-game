@@ -2,24 +2,19 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
-from aiogram.fsm.storage.memory import MemoryStorage
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
-from datetime import datetime
-from typing import Any, Collection, Optional
-from pydantic import BaseModel
+from typing import Collection, Optional
 from aiogram.types import Message
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from src.battles.logic.common import CommonCardInBattle, CommonUserInBattle
+from src.battles.logic.common import CommonCardInBattle
 from src.battles.logic.domain import Battle_T, BattlesManagement
 from src.core.settings import Config, config
 from src.battles.logic.process import start_battle
 from src.battles.models import BattleType
 from src.battles.schemas import SStandardBattleChoice
-from src.constants import BattleInProcessOrEnd, BattleState
-from src.database.core import AsyncSessionLocal
+from src.constants import BattleState
 from src.handlers.rabbit.constants import INIT_BATTLE_QUEUE
 from src.handlers.rabbit.core import rabbit
 from src.handlers.telegram.battle.callbacks_data import ACTION_ABILITY, ACTION_ATTACK, ACTION_BLOCK, ACTION_BONUS, ACTION_CHANGE_CHARACTER, ACTION_CHANGE_TARGET, ACTION_END_TURN, ACTION_SHOW_DECK_STATUS, ACTION_SHOW_OPPONENT_STATUS
@@ -32,7 +27,6 @@ from src.handlers.telegram.constants import (
     user_data,
 )
 from src.logs import get_logger, dev_configure
-from src.users.models import MUser
 
 
 router = Router()
@@ -189,43 +183,12 @@ async def show_character_selection(message: Message, user_id: int, current_chara
         await message.bot.edit_message_text(
             chat_id=message.chat.id,
             message_id=user_data[user_id].message_id,
-            text=f"👥 **Выбор персонажа**\nВыберите персонажа:",
+            text="👥 **Выбор персонажа**\nВыберите персонажа:",
             parse_mode="markdown",
             reply_markup=builder.as_markup(),
         )
     else:
         await message.answer("Нет доступных персонажей для смены")
-
-
-async def show_target_selection(message: Message, user_id: int, current_character: int) -> None:
-    """Показать выбор персонажа"""
-    builder = InlineKeyboardBuilder()
-
-    battle_id = await redis.get(f"battle:{user_id}")
-    battle = BattlesManagement.get_battle(battle_id.decode())
-    if battle is None:
-        return
-
-    opponent_id = next(user.id for user in battle.get_users() if user.id != user_id)
-
-    # Кнопки выбора персонажа
-    for i, card in enumerate(battle.get_deck_by_user(opponent_id), 1):
-        if i == current_character:
-            continue
-
-        builder.button(text=f"Персонаж #{i} {card.name}", callback_data=f"character_{i}")
-
-    # Кнопка назад
-    builder.button(text="🔙 Назад", callback_data="character_back")
-    builder.adjust(2, 2, 1, 1)
-
-    await message.bot.edit_message_text(
-        chat_id=message.chat.id,
-        message_id=user_data[user_id].message_id,
-        text="👥 **Выбор цель для атаки**\nВыберите персонажа:",
-        parse_mode="markdown",
-        reply_markup=builder.as_markup()
-    )
 
 
 async def show_target_selection(message: Message, user_id: int, current_character: int):
@@ -255,7 +218,7 @@ async def show_target_selection(message: Message, user_id: int, current_characte
         await message.bot.edit_message_text(
             chat_id=message.chat.id,
             message_id=user_data[user_id].message_id,
-            text=f"🤯 **Выбор Цели**\nВыберите персонажа:",
+            text="🤯 **Выбор Цели**\nВыберите персонажа:",
             parse_mode="markdown",
             reply_markup=builder.as_markup(),
         )
@@ -428,7 +391,6 @@ async def reset_user_turn(user_id: int, action_score: int = 0):
         log.error("can't get battle id in %s from async def reset_user_turn", __file__)
         return None
     battle = BattlesManagement.get_battle(battle_id.decode())
-    if battle is None:return
 
     own_deck: list[CommonCardInBattle] = battle.get_deck_by_user(user_id)
 

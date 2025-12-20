@@ -2,8 +2,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional, Iterable
 
-from sqlalchemy import JSON, ForeignKey
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import JSON
+from sqlalchemy.orm import Mapped, mapped_column
 
 from src.database.BaseModel import Base
 

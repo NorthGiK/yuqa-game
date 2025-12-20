@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Iterable, Optional
+from typing import Any, Collection, Iterable, Optional
 
 from sqlalchemy import Select, select
 
@@ -30,7 +30,7 @@ class CardRepository:
         """
         returns cards by their id
         """
-        async with AsyncSessionLocal() as session:
+        async with cls.db() as session:
             try:
                 cards: list[MCard] = (await session.execute(query)).scalars().all()
             except:
@@ -40,7 +40,7 @@ class CardRepository:
 
 
     @classmethod
-    async def get_cards(cls, ids: Iterable[int]) -> Optional[list[CommonCardInBattle]]:
+    async def get_cards(cls, ids: Collection[int]) -> Optional[list[CommonCardInBattle]]:
         query = select(MCard).where(MCard.id.in_(ids))
         cards: list[MCard] | None = await cls._base_get_cards(query=query)
         if cards is None:
@@ -55,7 +55,7 @@ class CardRepository:
         async with AsyncSessionLocal() as session:
             raw_deck: Optional[list[int]] = (await session.execute(query)).scalar_one_or_none()
 
-        return await get_cards(raw_deck) #type:ignore
+        return await CardRepository.get_cards(raw_deck)
 
 
     @classmethod

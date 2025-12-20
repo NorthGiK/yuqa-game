@@ -1,7 +1,7 @@
 import json
 import os
 
-from src.cards.models import MAbilities, MCard
+from src.cards.models import MCard
 from src.database.core import AsyncSessionLocal
 
 

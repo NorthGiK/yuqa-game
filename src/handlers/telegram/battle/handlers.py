@@ -3,24 +3,14 @@ from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 
 from src.battles.logic.common import CommonCardInBattle, CommonUserInBattle
-from src.battles.logic.domain import Battle_T, BattlesManagement
-from src.core.settings import Config, config
-from src.battles.logic.process import start_battle
-from src.battles.models import BattleType
-from src.battles.schemas import SStandardBattleChoice
-from src.constants import BattleInProcessOrEnd, BattleState
-from src.database.core import AsyncSessionLocal
-from src.handlers.rabbit.constants import INIT_BATTLE_QUEUE
-from src.handlers.rabbit.core import rabbit
-from src.utils.redis_cache import redis
+from src.battles.logic.domain import BattlesManagement
+from src.handlers.telegram.battle.battle import end_turn, make_deck_status_text, show_action_keyboard, show_character_selection, show_target_selection
 from src.handlers.telegram.constants import (
-    USER_BATTLE_REDIS,
     BattleChoiceTG,
     GameStates,
     user_data,
 )
 from src.logs import get_logger, dev_configure
-from src.users.models import MUser
 
 
 router = Router()

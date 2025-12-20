@@ -9,6 +9,7 @@ from aiogram.types import (
     CallbackQuery,
 )
 
+from src.core.settings import Config
 from src.handlers.raw_text import GREETING_NEW_USER_MESSAGE, GREETING_USER_MESSAGE
 from src.handlers.telegram import constants
 from src.handlers.telegram.components import tabs
@@ -27,7 +28,7 @@ dev_configure()
 async def _start(msg: Union[Message, CallbackQuery]):
     user = msg.from_user
     if user is None:
-        await msg.reply(f"чето не так с юзером, стань нормальным") #type:ignore
+        await msg.reply("чето не так с юзером, стань нормальным") #type:ignore
         return
 
     username: Optional[str] = user.username
@@ -43,8 +44,10 @@ async def _start(msg: Union[Message, CallbackQuery]):
 
     answer = dict(
         text=GREETING_USER_MESSAGE.format(username=username),
-        reply_markup=tabs.main,
+        reply_markup=tabs.admin_start if user_id == Config().tg_workflow.ADMIN_ID
+                     else tabs.main,
     )
+
     if isinstance(msg, CallbackQuery):
         await msg.answer()
         await msg.message.answer(**answer)
@@ -130,3 +133,11 @@ async def battle_handler(clbk: CallbackQuery):
     await clbk.message.answer(text="Выбирай тип боя",
                               reply_markup=tabs.battle)
 
+
+@router.callback_query(F.data == constants.Navigation.admin)
+async def show_admin_panel(clbk: CallbackQuery) -> None:
+    await clbk.answer()
+    await clbk.message.answer(
+        "🤏 Колдовская наху",
+        reply_markup=tabs.admin_panel,
+    )

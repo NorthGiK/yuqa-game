@@ -77,3 +77,25 @@ gacha = InlineKeyboardMarkup(inline_keyboard=[
     [ InlineKeyboardButton(text="Золотая крутка", callback_data=PIT_GOLD) ],
     _return_to(Navigation.main),
 ])
+
+admin_panel = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="⭐️ Добавить вселенную", callback_data=Navigation.in_admin.create_universe)],
+    [InlineKeyboardButton(text="🦹‍♂️ Добавить персонажа", callback_data=Navigation.in_admin.create_card)],
+    [InlineKeyboardButton(text="💌 Добавить баннер", callback_data=Navigation.in_admin.create_banner)]
+])
+
+admin_start = InlineKeyboardMarkup(inline_keyboard=[
+    [
+        InlineKeyboardButton(text="Профиль", callback_data=Navigation.profile),
+        InlineKeyboardButton(text="Инвентарь", callback_data=Navigation.inventory),
+    ],
+    [
+        InlineKeyboardButton(text="Бой", callback_data=Navigation.battle),
+        InlineKeyboardButton(text="Магазин", callback_data=Navigation.shop),
+    ],
+    [ InlineKeyboardButton(text="Баннеры", callback_data=Navigation.gacha) ],
+    [
+        InlineKeyboardButton(text="  Экскурсия по YUQA", callback_data=Navigation.tour)
+    ],
+    [ InlineKeyboardButton(text="🎭️ Панель Админа", callback_data=Navigation.admin) ]
+])
