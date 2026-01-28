@@ -8,10 +8,13 @@ from src.core.settings import config
 from src.database.BaseModel import Base
 
 
+DB_URL = f"sqlite+aiosqlite:///{config.db.DB_URL}"
+
 engine = create_async_engine(
-    config.db.DB_URL,
+    DB_URL,
     echo=True,
 )
+del DB_URL
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,

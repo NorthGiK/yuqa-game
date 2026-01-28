@@ -39,7 +39,6 @@ async def show_deck(clbk: CallbackQuery, state: FSMContext) -> None:
     )
 
 
-
 @router.callback_query(F.data.startswith("character_"))
 async def process_character_selection(callback: CallbackQuery, state: FSMContext):
     """Обработка выбора персонажа"""

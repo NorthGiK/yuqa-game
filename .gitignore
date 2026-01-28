@@ -24,6 +24,7 @@ _.go
 go/
 ruff.toml
 uv.lock
+*.db
 
 # Virtual environments
 .venv

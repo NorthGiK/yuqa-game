@@ -54,7 +54,7 @@ class CommonUserInBattle:
     step: Optional[SStandardBattleChoice] = None
     action_score: int = 2
 
-
+type Card_List = list['CommonCardInBattle']
 @dataclass(slots=True, eq=False)
 class CommonCardInBattle:
     name: str
@@ -65,15 +65,15 @@ class CommonCardInBattle:
     ability: Ability
     active_abilities: dict[SubAbility, int] = field(default_factory=dict) #type:ignore
 
-
     @log_func_call(log)
     def _apply_stat_change(self, ability_type: AbilityType, value: int) -> None:
         """изменение статистики с валидацией"""
         if not hasattr(self, ability_type.value):
-            raise AttributeError(
-                f"нет такого атрибута {ability_type.value}\n"
-                f"{__file__}\n"
-                f"class: `{self.__class__}` method: `{self.__class__._apply_stat_change.__name__}`\n"
+            raise Debug_AttributeError(
+                ability_type.value,
+                __file__,
+                self.__class__,
+                self.__class__._apply_stat_change.__name__,
             )
 
         current_value = getattr(self, ability_type.value)
@@ -85,8 +85,6 @@ class CommonCardInBattle:
  
         setattr(self, ability_type.value, new_value)
 
-
-    type Card_List = list['CommonCardInBattle']
     @log_func_call(log)
     def _get_target_cards(
         self,
@@ -139,7 +137,6 @@ class CommonCardInBattle:
         """Добавление способности в активные"""
         self.active_abilities[ability] = duration
 
-
     def use_ability(
         self,
         own_deck: Card_List,
@@ -155,7 +152,6 @@ class CommonCardInBattle:
                 opponent_deck=opponent_deck,
                 duration=duration,
             )
-
 
     def process_abilities(self) -> None:
         """Обработка активных способностей с удалением"""
@@ -173,7 +169,6 @@ class CommonCardInBattle:
         for ability in expired_abilities:
             self._apply_stat_change(ability.type, -ability.value)
             del self.active_abilities[ability]
-
 
     @log_func_call(log)
     @staticmethod
@@ -210,20 +205,19 @@ class CommonCardInBattle:
             ability=ability,
         )
 
-
     @staticmethod
     @overload
-    async def from_model(model: Union[Card, MCard]) -> list["CommonCardInBattle"]:
+    async def from_model(model: Union[Card, MCard]) -> Card_List:
         pass
 
     @staticmethod
     @overload
-    async def from_model(model: Union[list[Card], list[MCard]]) -> list["CommonCardInBattle"]:
+    async def from_model(model: Union[list[Card], list[MCard]]) -> Card_List:
         pass
 
     @log_func_call(log)
     @staticmethod
-    async def from_model(model: Union[Card, MCard, list[Card], list[MCard]]) -> list["CommonCardInBattle"]:
+    async def from_model(model: Union[Card, MCard, list[Card], list[MCard]]) -> Card_List:
         self = CommonCardInBattle
         if isinstance(model, list):
             return [await self._get_card(card) for card in model]

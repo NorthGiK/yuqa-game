@@ -3,7 +3,6 @@ from typing import Any, Optional
 
 from aiogram.fsm.state import State, StatesGroup
 
-
 USER_BATTLE_REDIS = "battle:{id}"
 
 
@@ -24,20 +23,25 @@ class Navigation:
         create_card = "CREATE CARD"
         create_banner = "CREATE BANNER"
 
-
     @dataclass(frozen=True, slots=True)
     class in_inventory:
         legendary = "LEGENDARY"
         badenko = "BADENKO"
- 
 
     @dataclass(frozen=True, slots=True)
     class in_battle:
         standard = "STANDARD"
         duo = "DUO"
 
+    @dataclass(frozen=True, slots=True)
+    class in_shop:
+        common = "COMMON"
+        special = "SPECIAL"
+        donut = "DONUT"
 
-user_data: dict[int, 'BattleChoiceTG'] = {}
+
+user_data: dict[int, "BattleChoiceTG"] = {}
+
 
 class GameStates(StatesGroup):
     waiting_for_action = State()

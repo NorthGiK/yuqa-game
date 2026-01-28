@@ -8,6 +8,7 @@ from typing import (
     Annotated,
     Any,
     Optional,
+    Self,
     Union,
     override,
 )
@@ -249,7 +250,7 @@ class BattleStandard(BattleWithDeck):
         user2: CommonUserInBattle,
         deck1: list[CommonCardInBattle],
         deck2: list[CommonCardInBattle],
-    ) -> "BattleStandard":
+    ) -> 'BattleStandard':
         return BattleStandard(
             user1=user1,
             user2=user2,

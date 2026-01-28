@@ -1,39 +1,62 @@
+from typing import Collection, Optional
+
 from aiogram import F, Router
-from aiogram.types import CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.base import StorageKey
-from fastapi import APIRouter
-
-from typing import Collection, Optional
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from fastapi import APIRouter
 
 from src.battles.logic.common import CommonCardInBattle
 from src.battles.logic.domain import Battle_T, BattlesManagement
-from src.core.settings import Config, config
 from src.battles.logic.process import start_battle
 from src.battles.models import BattleType
 from src.battles.schemas import SStandardBattleChoice
 from src.constants import BattleState
+from src.core.settings import Config, config
 from src.handlers.rabbit.constants import INIT_BATTLE_QUEUE
 from src.handlers.rabbit.core import rabbit
-from src.handlers.telegram.battle.callbacks_data import ACTION_ABILITY, ACTION_ATTACK, ACTION_BLOCK, ACTION_BONUS, ACTION_CHANGE_CHARACTER, ACTION_CHANGE_TARGET, ACTION_END_TURN, ACTION_SHOW_DECK_STATUS, ACTION_SHOW_OPPONENT_STATUS
-from src.handlers.telegram.battle.raw_data import ABILITY_BUTTON, ATTACK_BUTTON, BLOCK_BUTTON, BONUS_BUTTON, CHANGE_CARD_BUTTON, CHANGE_TARGET_BUTTON, END_ROUND_BUTTON, ERROR_START_CMD_WITHOUT_ARGUMENTS, SHOW_DECK_BUTTON, SHOW_OPPOENT_BUTTON, generate_status_text
-from src.utils.redis_cache import redis
+from src.handlers.telegram.battle.constants import (
+    ACTION_ABILITY,
+    ACTION_ATTACK,
+    ACTION_BLOCK,
+    ACTION_BONUS,
+    ACTION_CHANGE_CHARACTER,
+    ACTION_CHANGE_TARGET,
+    ACTION_END_TURN,
+    ACTION_SHOW_DECK_STATUS,
+    ACTION_SHOW_OPPONENT_STATUS,
+)
+from src.handlers.telegram.battle.raw_data import (
+    ABILITY_BUTTON,
+    ATTACK_BUTTON,
+    BLOCK_BUTTON,
+    BONUS_BUTTON,
+    CHANGE_CARD_BUTTON,
+    CHANGE_TARGET_BUTTON,
+    END_ROUND_BUTTON,
+    ERROR_START_CMD_WITHOUT_ARGUMENTS,
+    SHOW_DECK_BUTTON,
+    SHOW_OPPOENT_BUTTON,
+    generate_status_text,
+)
 from src.handlers.telegram.constants import (
     USER_BATTLE_REDIS,
     BattleChoiceTG,
     GameStates,
     user_data,
 )
-from src.logs import get_logger, dev_configure
-
+from src.logs import dev_configure, get_logger
+from src.users.crud import UserRepository
+from src.users.models import BattleResult
+from src.utils.redis_cache import redis
 
 router = Router()
 api_router = APIRouter()
 
 log = get_logger(__name__)
 dev_configure()
+
 
 async def delete_user_state(user_id: int) -> None:
     """Обновить данные пользователя"""
@@ -51,9 +74,10 @@ async def create_battle_state(user_id: int) -> None:
     key = StorageKey(chat_id=user_id, user_id=user_id, bot_id=bot.id)
     await storage.set_state(key=key, state=GameStates.waiting_for_action)
 
+
 @router.message(F.text == BattleType.duo)
 async def start_duo_battle(msg: Message) -> None:
-    user_id: int = msg.from_user.id
+    user_id: int = msg.from_user.id  # type:ignore
 
     await start_battle(user_id=user_id, type=BattleType.duo)
 
@@ -65,17 +89,17 @@ async def confirm_battle(users: Collection[int]) -> None:
 
 
 async def _cmd_start(
-        clbk: Message | CallbackQuery | None = None,
-        user_id: Optional[int] = None,
-        state: Optional[FSMContext] = None,
-    ) -> None:
+    clbk: Message | CallbackQuery | None = None,
+    user_id: Optional[int] = None,
+    state: Optional[FSMContext] = None,
+) -> None:
     """Инициализация игры"""
     # Инициализация данных пользователя
     if (clbk is None) and (user_id is None):
         log.error(ERROR_START_CMD_WITHOUT_ARGUMENTS)
         return
 
-    user_id = user_id if user_id else clbk.from_user.id
+    user_id = user_id if user_id else clbk.from_user.id  # type:ignore
     if user_data.get(user_id) is None:
         user_data[user_id] = BattleChoiceTG()
 
@@ -103,9 +127,15 @@ async def show_action_keyboard(clbk: CallbackQuery | Message | None, user_id: in
 
     # Кнопки действий (всегда активны, если есть ходы)
     if data.action_score > 0:
-        builder.button(text=ATTACK_BUTTON.format(data.attack_count), callback_data=ACTION_ATTACK)
-        builder.button(text=BLOCK_BUTTON.format(data.block_count), callback_data=ACTION_BLOCK)
-        builder.button(text=BONUS_BUTTON.format(data.bonus_count), callback_data=ACTION_BONUS)
+        builder.button(
+            text=ATTACK_BUTTON.format(data.attack_count), callback_data=ACTION_ATTACK
+        )
+        builder.button(
+            text=BLOCK_BUTTON.format(data.block_count), callback_data=ACTION_BLOCK
+        )
+        builder.button(
+            text=BONUS_BUTTON.format(data.bonus_count), callback_data=ACTION_BONUS
+        )
         builder.button(text=ABILITY_BUTTON, callback_data=ACTION_ABILITY)
 
     # Кнопка смены персонажа (всегда активна)
@@ -144,7 +174,7 @@ async def show_action_keyboard(clbk: CallbackQuery | Message | None, user_id: in
 
     elif isinstance(clbk, Message):
         msg = await clbk.answer(status_text, reply_markup=builder.as_markup())
-    
+
     else:
         bot = Config().tg_workflow.bot
         msg = await bot.send_message(
@@ -156,7 +186,9 @@ async def show_action_keyboard(clbk: CallbackQuery | Message | None, user_id: in
     user_data[user_id].message_id = msg.message_id
 
 
-async def show_character_selection(message: Message, user_id: int, current_character: int):
+async def show_character_selection(
+    message: Message, user_id: int, current_character: int
+):
     battle_id_bytes: Optional[bytes] = await redis.get(f"battle:{user_id}")
     if not battle_id_bytes:
         return await message.answer("Бой не найден")
@@ -172,8 +204,8 @@ async def show_character_selection(message: Message, user_id: int, current_chara
     for i, card in enumerate(deck):
         if card.hp > 0 and i != current_character - 1:
             builder.button(
-                text=f"Персонаж #{i+1} {card.name} (♥ {card.hp})", 
-                callback_data=f"character_{i+1}"
+                text=f"Персонаж #{i + 1} {card.name} (♥ {card.hp})",
+                callback_data=f"character_{i + 1}",
             )
 
     if builder.buttons:
@@ -207,8 +239,8 @@ async def show_target_selection(message: Message, user_id: int, current_characte
     for i, card in enumerate(deck):
         if card.hp > 0 and i != current_character - 1:
             builder.button(
-                text=f"Цель #{i+1} {card.name} (♥ {card.hp})", 
-                callback_data=f"character_{i+1}"
+                text=f"Цель #{i + 1} {card.name} (♥ {card.hp})",
+                callback_data=f"character_{i + 1}",
             )
 
     if builder.buttons:
@@ -233,7 +265,7 @@ async def end_turn(message: Message, state: FSMContext, user_id: int):
         log.warning("user isn't in battles")
         return
     battle_id: Optional[bytes] = await redis.get(f"battle:{user_id}")
-    
+
     if battle_id is None:
         await message.answer("Ошибка: бой не найден")
         return
@@ -263,7 +295,7 @@ async def end_turn(message: Message, state: FSMContext, user_id: int):
         f"🎯 **Ход завершён!**\n"
         f"Итоги:\n"
         f"🗡 Атак: {data.attack_count}\n"
-        f"🛡 Блоков: {data.block_count}\n" 
+        f"🛡 Блоков: {data.block_count}\n"
         f"⭐ Бонусов: {data.bonus_count}\n"
         f"🌀 Способность: {'ИСПОЛЬЗОВАНА' if data.ability_used else 'не использована'}\n"
         f"👤 Персонаж: #{data.current_character} - {card.name}"
@@ -321,16 +353,16 @@ async def start_new_turn(state: FSMContext, user_id: int, battle: Battle_T):
 
 
 async def handle_battle_end(
-        message: Message,
-        battle: Battle_T,
-        user_id: int,
-        state: FSMContext,
-    ) -> None:
+    message: Message,
+    battle: Battle_T,
+    user_id: int,
+    state: FSMContext,
+) -> None:
     """Обработка завершения боя"""
     # Определяем результат боя
     result = battle.check_cards_hp()
     if result is None:
-        log.warning("called end of battle, when don't all users cards died!")        
+        log.warning("called end of battle, when don't all users cards died!")
         return
 
     users = list(battle.get_users())
@@ -339,38 +371,43 @@ async def handle_battle_end(
     loss_message = "💔 **Поражение!** Вы проиграли бой."
     oppoennt_id: int = next(user for user in users if user.id != user_id).id
 
-    if len(users) == 2:
-        if result == user_id:
-            text = loss_message
+    if result == user_id:
+        text = loss_message
+        # TODO:
+        UserRepository.calculate_rating_after_battle(user_id, BattleResult.loss)
 
-            await message.bot.send_message(
-                oppoennt_id,
-                win_message,
-                parse_mode="markdown",
-            )
-        elif result != 0:
-            text = win_message
+        UserRepository.calculate_rating_after_battle(opponent_id, BattleResult.win)
+        await message.bot.send_message(
+            oppoennt_id,
+            win_message,
+            parse_mode="markdown",
+        )
 
-            await message.bot.send_message(
-                oppoennt_id,
-                loss_message,
-                parse_mode="markdown",
-            )
-        else:  # Ничья
-            text = "🤝 **Ничья!**"
-            await message.bot.send_message(
-                oppoennt_id,
-                text,
-                parse_mode="markdown",
-            )
-    else:
-        text = "⚔️ **Бой завершен!**"
+    elif result == opponent_id:
+        text = win_message
+        UserRepository.calculate_rating_after_battle(user_id, BattleResult.win)
+
+        UserRepository.calculate_rating_after_battle(opponent_id, BattleResult.win)
+        await message.bot.send_message(
+            oppoennt_id,
+            loss_message,
+            parse_mode="markdown",
+        )
+    else:  # Ничья
+        text = "🤝 **Ничья!**"
+
+        UserRepository.calculate_rating_after_battle(user_id, BattleResult.draw)
+        UserRepository.calculate_rating_after_battle(opponent_id, BattleResult.draw)
+
+        await message.bot.send_message(
+            oppoennt_id,
+            text,
+            parse_mode="markdown",
+        )
 
     # Отправляем результат
     await message.bot.send_message(
-        chat_id=message.chat.id,
-        text=text,
-        parse_mode="markdown"
+        chat_id=message.chat.id, text=text, parse_mode="markdown"
     )
 
     # Очищаем данные боя
@@ -405,7 +442,6 @@ async def reset_user_turn(user_id: int, action_score: int = 0):
 
         return current_index
 
-
     current_char = change_index(own_deck, current_char)
     current_target = change_index(opponent_deck, current_target)
     user_data[user_id] = BattleChoiceTG(
@@ -415,5 +451,5 @@ async def reset_user_turn(user_id: int, action_score: int = 0):
         attack_count=0,
         block_count=0,
         bonus_count=0,
-        ability_used=False
+        ability_used=False,
     )

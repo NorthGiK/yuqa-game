@@ -1,10 +1,8 @@
 from src.handlers.telegram.constants import user_data
 
 
-# ========LOGGING ERRORS===========
 ERROR_START_CMD_WITHOUT_ARGUMENTS = "called _cmd_start without callback and user id!"
 
-# ========RAW TEXT ================
 ATTACK_BUTTON = "🗡 Атака ({})"
 BLOCK_BUTTON = "🛡 Блок ({})"
 BONUS_BUTTON = "⭐ Бонус ({})"
@@ -15,7 +13,6 @@ SHOW_DECK_BUTTON = "👤 своя колода"
 SHOW_OPPOENT_BUTTON = "👁️‍🗨️ колода соперника"
 END_ROUND_BUTTON = "✅ Завершить ход"
 
-# ========GENERATE TEXT===========
 def generate_status_text(user_id: int) -> str:
     """Генерация текста статуса"""
     data = user_data[user_id]
