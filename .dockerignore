@@ -16,12 +16,10 @@ test.log
 dir/
 fold/
 static/
+_.cpp
+test
 ruff.toml
 *.db
-*.png
-*.jpg
-*.jpeg
-*.webp
 
 # Virtual environments
 .venv

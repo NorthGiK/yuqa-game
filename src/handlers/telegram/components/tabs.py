@@ -37,7 +37,7 @@ def _return_to(
                 callback_data=where,  # type:ignore
             )
         ]
-    return [KeyboardButton(text="Назад ↵")]
+    return [KeyboardButton(text="Назад")]
 
 
 main = InlineKeyboardMarkup(
@@ -111,6 +111,7 @@ battle = ReplyKeyboardMarkup(
         _return_to(Navigation.main, False),
     ],
     resize_keyboard=True,
+    one_time_keyboard=True,
 )
 
 gacha = InlineKeyboardMarkup(
@@ -193,3 +194,16 @@ donut_shop = InlineKeyboardMarkup(
         _return_to(Navigation.shop),
     ]
 )
+
+battle_pass_main = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [InlineKeyboardButton(text="Обычный пасс", callback_data=Navigation.in_battle_pass.common)],
+        [InlineKeyboardButton(text="Специальный пасс", callback_data=Navigation.in_battle_pass.special)],
+        _return_to(Navigation.main),
+    ],
+)
+
+battle_pass_common = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text="дневные задания", callback_data=Navigation.in_)],
+    _return_to(battle_pass_main),
+])

@@ -14,6 +14,7 @@ from src.database.core import AsyncSessionLocal
 
 api_router = APIRouter(prefix="/dev")
 
+
 class User(BaseModel):
     rating: int
     inventory: list[int]
@@ -27,7 +28,7 @@ async def create_user_handler(data: User):
     if data.inventory == [0]:
         data.inventory = [1, 2]
     if data.deck == [0]:
-        data.deck = [1,2]
+        data.deck = [1, 2]
 
     user = MUser(**data.model_dump())
     async with AsyncSessionLocal() as session:
@@ -47,14 +48,14 @@ async def start_duo_battle_api(
 
 @api_router.post("/process_battle")
 async def handle_user_step(
-		choice: SStandardBattleChoice,
-	) -> Optional[BattleInProcessOrEnd]:
+    choice: SStandardBattleChoice,
+) -> Optional[BattleInProcessOrEnd]:
     battle: Optional[Battle_T] = BattlesManagement.get_battle(choice.battle_id)
     if battle is None:
         return None
 
     used_bonus: int = sum((choice.hits, choice.blocks, choice.bonus))
-    user_action_score: int = battle.get_user(user_id=choice.user_id).action_score #type:ignore
+    user_action_score: int = battle.get_user(user_id=choice.user_id).action_score  # type:ignore
 
     if used_bonus > user_action_score:
         raise HTTPException(401, "too much used bonus!")

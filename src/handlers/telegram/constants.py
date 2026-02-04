@@ -3,8 +3,8 @@ from typing import Any, Optional
 
 from aiogram.fsm.state import State, StatesGroup
 
-USER_BATTLE_REDIS = "battle:{id}"
-
+BATTLE_ID_REDIS = "battle:{id}"
+CURRENT_IVENTORY_PAGE_REDIS = "{user_id}:inventory:{rarity}"
 
 @dataclass(frozen=True, slots=True, eq=False, init=False)
 class Navigation:
@@ -16,6 +16,7 @@ class Navigation:
     inventory = "INVENTORY"
     tour = "TOUR"
     admin = "ADMIN"
+    battle_pass = "BATTLE_PASS"
 
     @dataclass(frozen=True)
     class in_admin:
@@ -35,9 +36,14 @@ class Navigation:
 
     @dataclass(frozen=True, slots=True)
     class in_shop:
-        common = "COMMON"
-        special = "SPECIAL"
+        common = "COMMON_SHOP"
+        special = "SPECIAL_SHOP"
         donut = "DONUT"
+    
+    @dataclass(frozen=True, slots=True)
+    class in_battle_pass:
+        common = "COMMON_PASS"
+        special = "SPECIAL_PASS"
 
 
 user_data: dict[int, "BattleChoiceTG"] = {}

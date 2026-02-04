@@ -5,9 +5,10 @@ from typing import Optional
 
 from sqlalchemy import DateTime, ForeignKey
 from sqlalchemy.dialects.sqlite import JSON
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.database.BaseModel import Base
+from src.game_events.battle_pass.models import MPassProgress
 from src.users.constants import (
     DEFAULT_USER_CARDS_IN_DECK,
     DEFAULT_USER_CARDS_IN_INVENTORY,
@@ -36,12 +37,18 @@ class MUser(Base):
         insert_default=DEFAULT_USER_CARDS_IN_DECK,
     )
     active: Mapped[bool] = mapped_column(
-        default=True,
         insert_default=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=get_time,
+    )
+
+    pass_progress = relationship(
+        "MPassProgress",
+        uselist=False,
+        back_populates="user",
+        cascade="all, delete-orphan",
     )
 
     pytis: Mapped[int] = mapped_column(insert_default=0)

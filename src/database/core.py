@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import (
-  	create_async_engine, 
-	async_sessionmaker, 
-	AsyncSession,
+    create_async_engine,
+    async_sessionmaker,
+    AsyncSession,
 )
 
 from src.core.settings import config
@@ -21,6 +21,7 @@ AsyncSessionLocal = async_sessionmaker(
     expire_on_commit=False,
     class_=AsyncSession,
 )
+
 
 async def init_db() -> None:
     async with engine.connect() as conn:

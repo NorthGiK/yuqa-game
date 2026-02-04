@@ -1,8 +1,10 @@
+from functools import wraps
 import logging
 from typing import Any, Callable
 
 
 def log_func_call(logger: logging.Logger, /):
+    @wraps
     def wrap(func: Callable[..., Any]):
         def inner(*args, **kwargs):
             message: str = "call `{func}`, args `{args}, {kwargs}`".format(

@@ -7,8 +7,9 @@ class UndefinedBattleTypeError(Exception):
     def message(self) -> str:
         return "Undefined Battle Type!"
 
+
 @dataclass(frozen=True, slots=True, eq=False)
 class UndefinedCardIdError(Exception):
     @property
     def message(self) -> str:
-        return ("Undefined Card Id!")
+        return "Undefined Card Id!"

@@ -34,9 +34,7 @@ class MAbilities(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     sub_abilities: Mapped[dict[str, Any]] = mapped_column(
-        JSON,
-        default=dict,
-        doc="annotated SubAbility as json(dict)"
+        JSON, default=dict, doc="annotated SubAbility as json(dict)"
     )
     card_id: Mapped[int] = mapped_column("users_t.id", unique=True)
     cooldown: Mapped[int] = mapped_column()
@@ -55,7 +53,7 @@ class Card:
     atk: int
     hp: int
     def_: int
-    ability: 'Ability'
+    ability: "Ability"
     id: Optional[int] = None
     name: Optional[str] = None
     universe: Optional[str] = None

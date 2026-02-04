@@ -13,6 +13,7 @@ SHOW_DECK_BUTTON = "👤 своя колода"
 SHOW_OPPOENT_BUTTON = "👁️‍🗨️ колода соперника"
 END_ROUND_BUTTON = "✅ Завершить ход"
 
+
 def generate_status_text(user_id: int) -> str:
     """Генерация текста статуса"""
     data = user_data[user_id]

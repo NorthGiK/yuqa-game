@@ -14,27 +14,26 @@ from src.utils.patterns import Singletone
 @dataclass(frozen=True, slots=True, eq=False)
 class RandomManager(Singletone):
     _rarities: list[Rarity] = field(default_factory=lambda: [r for r in Rarity])
-    _chanches: list[Fraction] = field(default_factory=lambda: [
-        # Fraction(90, 100),              # 90 / 100
-        # Fraction(Fraction(15, 2), 100), # 7.5 / 100
-        # Fraction(Fraction(5, 2), 100),  # 2.5 / 100
-        50,
-        35,
-        15
-    ])
+    _chanches: list[Fraction] = field(
+        default_factory=lambda: [
+            # Fraction(90, 100),              # 90 / 100
+            # Fraction(Fraction(15, 2), 100), # 7.5 / 100
+            # Fraction(Fraction(5, 2), 100),  # 2.5 / 100
+            50,
+            35,
+            15,
+        ]
+    )
 
     def __post_init__(self) -> None:
         self.validate_chances()
 
-
     def validate_chances(self) -> None:
         if len(self._rarities) != len(self._rarities):
-            raise NotSameLengthOfRaritiesAndCanches()        
-
+            raise NotSameLengthOfRaritiesAndCanches()
 
     def choose_rarity(self) -> Rarity:
         return random.choices(self._rarities, weights=self._chanches, k=1)[0]
-
 
     @classmethod
     async def choose_card(
@@ -43,17 +42,11 @@ class RandomManager(Singletone):
         universe: Optional[str] = None,
     ) -> MCard:
         async with AsyncSessionLocal() as session:
-            query = (
-                select(MCard)
-                .where(MCard.rarity == rarity)
-            )
+            query = select(MCard).where(MCard.rarity == rarity)
             if universe is not None:
                 query = query.where(MCard.universe == universe)
-            
-            query = (
-                query
-                .order_by(func.random())
-                .limit(1))
+
+            query = query.order_by(func.random()).limit(1)
 
             card = (await session.execute(query)).scalar_one_or_none()
             if card is None:

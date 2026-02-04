@@ -41,7 +41,7 @@ from src.handlers.telegram.battle.raw_data import (
     generate_status_text,
 )
 from src.handlers.telegram.constants import (
-    USER_BATTLE_REDIS,
+    BATTLE_ID_REDIS,
     BattleChoiceTG,
     GameStates,
     user_data,
@@ -369,38 +369,38 @@ async def handle_battle_end(
 
     win_message = "🎉 **Победа!** Вы выиграли бой!"
     loss_message = "💔 **Поражение!** Вы проиграли бой."
-    oppoennt_id: int = next(user for user in users if user.id != user_id).id
+    opponent_id: int = next(user for user in users if user.id != user_id).id
 
     if result == user_id:
         text = loss_message
         # TODO:
-        UserRepository.calculate_rating_after_battle(user_id, BattleResult.loss)
+        await UserRepository.calculate_rating_after_battle(user_id, BattleResult.loss)
 
-        UserRepository.calculate_rating_after_battle(opponent_id, BattleResult.win)
+        await UserRepository.calculate_rating_after_battle(opponent_id, BattleResult.win)
         await message.bot.send_message(
-            oppoennt_id,
+            opponent_id,
             win_message,
             parse_mode="markdown",
         )
 
     elif result == opponent_id:
         text = win_message
-        UserRepository.calculate_rating_after_battle(user_id, BattleResult.win)
+        await UserRepository.calculate_rating_after_battle(user_id, BattleResult.win)
 
-        UserRepository.calculate_rating_after_battle(opponent_id, BattleResult.win)
+        await UserRepository.calculate_rating_after_battle(opponent_id, BattleResult.win)
         await message.bot.send_message(
-            oppoennt_id,
+            opponent_id,
             loss_message,
             parse_mode="markdown",
         )
     else:  # Ничья
         text = "🤝 **Ничья!**"
 
-        UserRepository.calculate_rating_after_battle(user_id, BattleResult.draw)
-        UserRepository.calculate_rating_after_battle(opponent_id, BattleResult.draw)
+        await UserRepository.calculate_rating_after_battle(user_id, BattleResult.draw)
+        await UserRepository.calculate_rating_after_battle(opponent_id, BattleResult.draw)
 
         await message.bot.send_message(
-            oppoennt_id,
+            opponent_id,
             text,
             parse_mode="markdown",
         )
@@ -413,7 +413,7 @@ async def handle_battle_end(
     # Очищаем данные боя
     for user in battle.get_users():
         del user_data[user.id]
-        await redis.delete(USER_BATTLE_REDIS.format(id=user.id))
+        await redis.delete(BATTLE_ID_REDIS.format(id=user.id))
         await delete_user_state(user.id)
 
 
@@ -423,7 +423,7 @@ async def reset_user_turn(user_id: int, action_score: int = 0):
     current_char = user_data[user_id].current_character
     current_target = user_data[user_id].target_character
 
-    battle_id: Optional[bytes] = await redis.get(USER_BATTLE_REDIS.format(id=user_id))
+    battle_id: Optional[bytes] = await redis.get(BATTLE_ID_REDIS.format(id=user_id))
     if not battle_id:
         log.error("can't get battle id in %s from async def reset_user_turn", __file__)
         return None

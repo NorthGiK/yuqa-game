@@ -1,7 +1,10 @@
 class NotSameLengthOfRaritiesAndCanches(Exception):
     @property
     def message(self) -> str:
-        return "Количество редкостей и количество шансов выпадения для редкостей не равны!"
+        return (
+            "Количество редкостей и количество шансов выпадения для редкостей не равны!"
+        )
+
 
 class NotSelectedCardError(Exception):
     @property

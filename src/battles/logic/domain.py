@@ -24,14 +24,14 @@ from src.battles.exceptions import (
 from src.battles.models import BattleType
 from src.battles.schemas import SStandardBattleChoice
 from src.cards.crud import CardRepository
-from src.handlers.telegram.constants import USER_BATTLE_REDIS
+from src.handlers.telegram.constants import BATTLE_ID_REDIS
 from src.logs import dev_configure, get_logger
 from src.utils.decorators import log_func_call
 from src.utils.redis_cache import redis
 from src.utils.patterns import Singletone
 from src.battles.logic.common import (
     Battle,
-    CommonCardInBattle, 
+    CommonCardInBattle,
     CommonUserInBattle,
     DeckSize,
 )
@@ -41,6 +41,7 @@ log = get_logger(__name__)
 dev_configure()
 
 type Battle_T = Union["BattleWithDeck", "BattleStandard", "BattleDuo"]
+
 
 @dataclass
 class BattleWithDeck(Battle, ABC):
@@ -58,35 +59,33 @@ class BattleWithDeck(Battle, ABC):
     def create_battle(*args: Any, **kwargs: Any) -> Battle_T:
         pass
 
-
     @abstractmethod
     @log_func_call(log)
     def get_user(self, id: int) -> CommonUserInBattle:
         match id:
             case self.user1.id:
                 return self.user1
-            
+
             case self.user2.id:
                 return self.user2
-            
+
             case _:
                 raise UserNotFoundInBattle(module_of_err=__file__)
-    
 
     @abstractmethod
     @log_func_call(log)
     def get_users(self) -> tuple[CommonUserInBattle, CommonUserInBattle]:
         return self.user1, self.user2
 
-
     @abstractmethod
     @log_func_call(log)
-    def get_deck_by_user(self, user: Union[int, CommonUserInBattle]) -> list[CommonCardInBattle]:
+    def get_deck_by_user(
+        self, user: Union[int, CommonUserInBattle]
+    ) -> list[CommonCardInBattle]:
         if isinstance(user, CommonUserInBattle):
             user = user.id
 
         return self.deck1 if user == self.user1.id else self.deck2
-
 
     @abstractmethod
     @log_func_call(log)
@@ -103,32 +102,27 @@ class BattleWithDeck(Battle, ABC):
 
         return None
 
-
     @abstractmethod
     @log_func_call(log)
     def calc_curr_action_scores(self) -> None:
         self.round += 1
-        self.user1.action_score = max(7, self.round) + self.user1.step.bonus #type:ignore
-        self.user2.action_score = max(7, self.round) + self.user2.step.bonus #type:ignore
-
+        self.user1.action_score = max(7, self.round) + self.user1.step.bonus  # type:ignore
+        self.user2.action_score = max(7, self.round) + self.user2.step.bonus  # type:ignore
 
     @abstractmethod
     @log_func_call(log)
     def validate_round(self) -> None:
         if (
-            self.deck1[self.user1.step.selected_card].hp <= 0 #type:ignore
-            or
-            self.deck2[self.user2.step.selected_card].hp <= 0 #type:ignore
+            self.deck1[self.user1.step.selected_card].hp <= 0  # type:ignore
+            or self.deck2[self.user2.step.selected_card].hp <= 0  # type:ignore
         ):
             raise SelectedCardWithZeroHP(module_of_err=__file__)
 
         if (
-            self.deck2[self.user1.step.target].hp <= 0 #type:ignore
-            and
-            self.deck1[self.user2.step.target].hp <= 0 #type:ignore
+            self.deck2[self.user1.step.target].hp <= 0  # type:ignore
+            and self.deck1[self.user2.step.target].hp <= 0  # type:ignore
         ):
-            raise TargetCardWithZeroHP(module_of_err=__file__)                
-
+            raise TargetCardWithZeroHP(module_of_err=__file__)
 
     @abstractmethod
     @log_func_call(log)
@@ -137,33 +131,37 @@ class BattleWithDeck(Battle, ABC):
     ) -> constants.BattleInProcessOrEnd:
         if (self.user1.step is None) or (self.user2.step is None):
             return constants.BattleState.local.wait_opponent
-        
+
         self.user1.step.target -= 1
         self.user2.step.target -= 1
-        
+
         self.user1.step.selected_card -= 1
         self.user2.step.selected_card -= 1
 
         self.validate_round()
 
         if self.user1.step.ability:
-            self.deck1[self.user1.step.selected_card].use_ability(self.deck1, self.deck2)
-        
+            self.deck1[self.user1.step.selected_card].use_ability(
+                self.deck1, self.deck2
+            )
+
         if self.user2.step.ability:
-            self.deck2[self.user2.step.selected_card].use_ability(self.deck2, self.deck1)
+            self.deck2[self.user2.step.selected_card].use_ability(
+                self.deck2, self.deck1
+            )
 
         user1_total_dmg = max(
             0,
             (self.user1.step.hits - self.user2.step.blocks)
             * self.deck1[self.user1.step.selected_card].atk
-            - self.deck2[self.user1.step.target].def_
+            - self.deck2[self.user1.step.target].def_,
         )
 
         user2_total_dmg: int = max(
             0,
             (self.user2.step.hits - self.user1.step.blocks)
             * self.deck2[self.user2.step.selected_card].atk
-            - self.deck1[self.user2.step.selected_card].def_
+            - self.deck1[self.user2.step.selected_card].def_,
         )
 
         hp1 = self.deck1[self.user2.step.target].hp
@@ -178,9 +176,8 @@ class BattleWithDeck(Battle, ABC):
         self.calc_curr_action_scores()
         self.user1.step = None
         self.user2.step = None
- 
-        return constants.BattleState.local.end
 
+        return constants.BattleState.local.end
 
     @abstractmethod
     @log_func_call(log)
@@ -191,7 +188,7 @@ class BattleWithDeck(Battle, ABC):
         user = self.get_user(choice.user_id)
         user.step = choice
         status: BattleInProcessOrEnd = self.calc_step()
-        
+
         return status
 
 
@@ -240,6 +237,7 @@ class BattleDuo(BattleWithDeck):
     ) -> BattleInProcessOrEnd:
         return super().add_step(choice)
 
+
 @dataclass
 class BattleStandard(BattleWithDeck):
     @staticmethod
@@ -250,7 +248,7 @@ class BattleStandard(BattleWithDeck):
         user2: CommonUserInBattle,
         deck1: list[CommonCardInBattle],
         deck2: list[CommonCardInBattle],
-    ) -> 'BattleStandard':
+    ) -> "BattleStandard":
         return BattleStandard(
             user1=user1,
             user2=user2,
@@ -273,7 +271,9 @@ class BattleStandard(BattleWithDeck):
         return super().get_user(id=id)
 
     @override
-    def get_deck_by_user(self, user: int | CommonUserInBattle) -> list[CommonCardInBattle]:
+    def get_deck_by_user(
+        self, user: int | CommonUserInBattle
+    ) -> list[CommonCardInBattle]:
         return super().get_deck_by_user(user)
 
     @override
@@ -302,7 +302,7 @@ class BattleStandard(BattleWithDeck):
 
 @dataclass(slots=True)
 class _BattlesManagement(Singletone):
-    battles: dict[str, Battle_T] = field(default_factory=dict) #type:ignore
+    battles: dict[str, Battle_T] = field(default_factory=dict)  # type:ignore
 
     @log_func_call(log)
     async def create_battle(
@@ -335,17 +335,16 @@ class _BattlesManagement(Singletone):
 
         return id
 
-
     @log_func_call(log)
     def get_battle(self, id: str | Any) -> Optional[Battle_T]:
         return self.battles.get(id, None)
 
-
     @log_func_call(log)
     async def get_battle_from_user(self, id: int) -> Battle_T:
-        battle_id: Optional[bytes] = await redis.get(USER_BATTLE_REDIS.format(id=id))
+        battle_id: Optional[bytes] = await redis.get(BATTLE_ID_REDIS.format(id=id))
         if battle_id is None:
             raise Exception("can't get battle id from redis")
+
         battle: Optional[Battle_T] = self.get_battle(battle_id.decode())
         if battle is None:
             raise Exception("can't get battle from `BattlesManagement`")

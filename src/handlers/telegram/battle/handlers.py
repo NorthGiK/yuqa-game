@@ -4,7 +4,13 @@ from aiogram.fsm.context import FSMContext
 
 from src.battles.logic.common import CommonCardInBattle, CommonUserInBattle
 from src.battles.logic.domain import BattlesManagement
-from src.handlers.telegram.battle.battle import end_turn, make_deck_status_text, show_action_keyboard, show_character_selection, show_target_selection
+from src.handlers.telegram.battle.battle import (
+    end_turn,
+    make_deck_status_text,
+    show_action_keyboard,
+    show_character_selection,
+    show_target_selection,
+)
 from src.handlers.telegram.constants import (
     BattleChoiceTG,
     GameStates,
@@ -16,6 +22,7 @@ from src.logs import get_logger, dev_configure
 router = Router()
 log = get_logger(__name__)
 dev_configure()
+
 
 @router.callback_query(F.data.startswith("show_"))
 async def show_deck(clbk: CallbackQuery, state: FSMContext) -> None:
@@ -81,26 +88,25 @@ async def process_target_selection(callback: CallbackQuery, state: FSMContext):
 async def process_action(callback: CallbackQuery, state: FSMContext) -> None:
     """Обработка действий игрока"""
     user_id: int = callback.from_user.id
-    
+
     if user_id not in user_data:
         await callback.answer("Ошибка: данные не найдены", show_alert=True)
         return
-    
+
     data: BattleChoiceTG = user_data[user_id]
     action: str = callback.data
-    
+
     # Проверяем остались ли ходы (кроме смены персонажа и завершения хода)
-    if (
-        data.action_score <= 0 and
-        action not in [
-            "action_change_character",
-            "action_change_target",
-            "show_me",
-            "show_opponent",
-            "action_end_turn",
-        ]
-    ):
-        await callback.answer("Ходы закончились! Завершите ход или смените персонажа", show_alert=True)
+    if data.action_score <= 0 and action not in [
+        "action_change_character",
+        "action_change_target",
+        "show_me",
+        "show_opponent",
+        "action_end_turn",
+    ]:
+        await callback.answer(
+            "Ходы закончились! Завершите ход или смените персонажа", show_alert=True
+        )
         return
 
     action_performed = True
@@ -116,14 +122,14 @@ async def process_action(callback: CallbackQuery, state: FSMContext) -> None:
                 log.error(
                     "can't get attribute `%s` of `BattleChoiceTG`\n"
                     f"Error from `{__file__}` def process_action",
-                    attr)
+                    attr,
+                )
 
             setattr(data, attr, 1 + prev_value)
             await callback.answer(positive_message)
         else:
             await callback.answer(else_message)
-            return    
-
+            return
 
     # Обработка разных действий
     if action == "action_attack":
@@ -135,7 +141,7 @@ async def process_action(callback: CallbackQuery, state: FSMContext) -> None:
 
     elif action == "action_block":
         await handle_action(
-            "block_count", 
+            "block_count",
             "🛡 Блок добавлен!",
             "Недостаточно ходов для блока!",
         )
@@ -156,7 +162,9 @@ async def process_action(callback: CallbackQuery, state: FSMContext) -> None:
             data.action_score -= 5
             await callback.answer("🌀 Способность активирована!")
         else:
-            await callback.answer("Недостаточно ходов для способности! Нужно 5 ходов.", show_alert=True)
+            await callback.answer(
+                "Недостаточно ходов для способности! Нужно 5 ходов.", show_alert=True
+            )
             return
 
     elif action == "action_change_character":

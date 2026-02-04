@@ -8,7 +8,15 @@ from sqlalchemy import select
 from src import constants
 from src.battles.exceptions import InvalidDeckSizeError, InvalidTargetTypeError
 from src.battles.schemas import SStandardBattleChoice
-from src.cards.models import Ability, AbilityType, Card, MAbilities, MCard, SubAbility, TargetType
+from src.cards.models import (
+    Ability,
+    AbilityType,
+    Card,
+    MAbilities,
+    MCard,
+    SubAbility,
+    TargetType,
+)
 from src.database.core import AsyncSessionLocal
 from src.logs import dev_configure, get_logger
 from src.utils.decorators import log_func_call
@@ -17,10 +25,12 @@ from src.utils.decorators import log_func_call
 log = get_logger(__name__)
 dev_configure()
 
+
 class Battle(ABC):
     """
     Родительский класс для всех типов боёв
     """
+
     id = field(default_factory=lambda: str(uuid4()))
 
     def __hash__(self) -> int:
@@ -30,7 +40,6 @@ class Battle(ABC):
     @abstractmethod
     def create_battle(*args: Any, **kwargs: Any) -> Any:
         pass
-
 
     @abstractmethod
     def calc_step(self, *args: Any, **kwargs: Any) -> constants.BattleInProcessOrEnd:
@@ -54,7 +63,10 @@ class CommonUserInBattle:
     step: Optional[SStandardBattleChoice] = None
     action_score: int = 2
 
-type Card_List = list['CommonCardInBattle']
+
+type Card_List = list["CommonCardInBattle"]
+
+
 @dataclass(slots=True, eq=False)
 class CommonCardInBattle:
     name: str
@@ -63,7 +75,7 @@ class CommonCardInBattle:
     def_: int
     class_: int
     ability: Ability
-    active_abilities: dict[SubAbility, int] = field(default_factory=dict) #type:ignore
+    active_abilities: dict[SubAbility, int] = field(default_factory=dict)  # type:ignore
 
     @log_func_call(log)
     def _apply_stat_change(self, ability_type: AbilityType, value: int) -> None:
@@ -82,7 +94,7 @@ class CommonCardInBattle:
         # валидация что хп не меньше 0
         if ability_type == AbilityType.hp and new_value < 0:
             new_value = 0
- 
+
         setattr(self, ability_type.value, new_value)
 
     @log_func_call(log)
@@ -112,7 +124,6 @@ class CommonCardInBattle:
             case _:
                 raise InvalidTargetTypeError(target=target, module_of_err=__file__)
 
-
     def _apply_ability_to_targets(
         self,
         ability: SubAbility,
@@ -131,7 +142,6 @@ class CommonCardInBattle:
             card._apply_stat_change(ability.type, ability.value)
             if duration is not None:
                 card._add_ability_to_active(ability, duration)
-    
 
     def _add_ability_to_active(self, ability: SubAbility, duration: int) -> None:
         """Добавление способности в активные"""
@@ -176,31 +186,35 @@ class CommonCardInBattle:
         if isinstance(model, MCard):
             async with AsyncSessionLocal() as session:
                 query = select(MAbilities).where(MAbilities.id == model.ability_id)
-                mability: Optional[MAbilities] = (await session.execute(query)).scalar_one_or_none()
+                mability: Optional[MAbilities] = (
+                    await session.execute(query)
+                ).scalar_one_or_none()
                 if mability is None:
                     raise Exception(f"can't get ability with id `{model.ability_id}`")
-            
-            sub_abilities = [SubAbility(
-                type=AbilityType(abil["type"]),
-                target=TargetType(abil["target"]),
-                value=abil["value"], #type:ignore
-                ) for abil in mability.sub_abilities #type:ignore
+
+            sub_abilities = [
+                SubAbility(
+                    type=AbilityType(abil["type"]),
+                    target=TargetType(abil["target"]),
+                    value=abil["value"],  # type:ignore
+                )
+                for abil in mability.sub_abilities  # type:ignore
             ]
             ability = Ability(
-                sub_abilities=sub_abilities, #type:ignore
-                cooldown=mability.cooldown, #type:ignore
-                duration=mability.duration, #type:ignore
-                cost=mability.cost, #type:ignore
+                sub_abilities=sub_abilities,  # type:ignore
+                cooldown=mability.cooldown,  # type:ignore
+                duration=mability.duration,  # type:ignore
+                cost=mability.cost,  # type:ignore
             )
 
         else:
             ability = model.ability
 
         return CommonCardInBattle(
-            name=model.name, #type:ignore
-            hp=model.hp, #type:ignore
-            atk=model.atk, #type:ignore
-            def_=model.atk, #type:ignore
+            name=model.name,  # type:ignore
+            hp=model.hp,  # type:ignore
+            atk=model.atk,  # type:ignore
+            def_=model.atk,  # type:ignore
             class_=0,
             ability=ability,
         )
@@ -217,7 +231,9 @@ class CommonCardInBattle:
 
     @log_func_call(log)
     @staticmethod
-    async def from_model(model: Union[Card, MCard, list[Card], list[MCard]]) -> Card_List:
+    async def from_model(
+        model: Union[Card, MCard, list[Card], list[MCard]],
+    ) -> Card_List:
         self = CommonCardInBattle
         if isinstance(model, list):
             return [await self._get_card(card) for card in model]
@@ -230,6 +246,7 @@ class DeckSize:
     """
     неизменяемый класс для обозначения размера колоды в бою
     """
+
     value: int = 0
 
     def __post_init__(self) -> None:

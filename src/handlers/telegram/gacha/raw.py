@@ -1,8 +1,9 @@
-# ========RAW TEXT========
 from src.cards.models import MCard
 
 
 MAIN_GACHA_MESSAGE = "крути крутки, копи крутки, покупай крутки, заново всё это сделай"
+CANT_GET_USER_MESSAGE = "чето не так с юзером, стань нормальным"
+
 
 def GETTING_CARD_MESSAGE(card: MCard) -> str:
     return (
